@@ -45,7 +45,7 @@ async def test_previous_month_report_is_sent_on_first_morning(harness, session_f
     (message,) = sent(harness)
     assert message.chat_id == 1001
     assert "Oktabr 2026" in message.text
-    assert "Chiqim: 700 000 UZS" in message.text
+    assert "Chiqim: <b>700 000 UZS</b>" in message.text
     assert (await stored_user(session_factory)).last_report_month == "2026-10"
 
 

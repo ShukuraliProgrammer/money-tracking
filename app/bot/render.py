@@ -30,6 +30,15 @@ def signed(amount: Decimal, positive: bool) -> str:
     return f"{'+' if positive else '−'}{format_number(amount)}"
 
 
+def bold(text: str) -> str:
+    return f"<b>{text}</b>"
+
+
+def money(amount: Decimal, currency: str) -> str:
+    """Summa xabarda ko‘zga tashlanishi uchun qalin yoziladi: <b>250 000 UZS</b>."""
+    return bold(format_amount(amount, currency))
+
+
 def card_title(card: Card) -> str:
     return f"{card.name} ****{card.card_last4}"
 
@@ -41,7 +50,7 @@ def draft_summary(draft: ParsedTransaction, tz: ZoneInfo) -> str:
     income = draft.transaction_type == "income"
     lines = [
         texts.HEAD_INCOME if income else texts.HEAD_EXPENSE,
-        f"Summa: {format_amount(draft.amount, draft.currency)}" if draft.amount is not None else "Summa: —",
+        f"Summa: {money(draft.amount, draft.currency)}" if draft.amount is not None else "Summa: —",
         f"{'Kimdan' if income else 'Joy'}: {esc(draft.merchant) or '—'}",
         f"Karta: ****{draft.card_last4}" if draft.card_last4 else "Karta: —",
         f"Vaqt: {format_dt(draft.occurred_at, tz)}" if draft.occurred_at else "Vaqt: —",
@@ -53,7 +62,7 @@ def transaction_line(transaction: Transaction, tz: ZoneInfo) -> str:
     """Bitta tranzaksiyaning qisqa ko‘rinishi."""
     income = transaction.transaction_type == "income"
     icon = "💰" if income else "💸"
-    parts = [f"{icon} {format_amount(transaction.amount, transaction.currency)}"]
+    parts = [f"{icon} {money(transaction.amount, transaction.currency)}"]
     if transaction.merchant:
         parts.append(esc(transaction.merchant))
     return " — ".join(parts) + f" ({format_dt(transaction.occurred_at, tz)})"
@@ -61,7 +70,7 @@ def transaction_line(transaction: Transaction, tz: ZoneInfo) -> str:
 
 def saved_summary(transaction: Transaction, tz: ZoneInfo) -> str:
     income = transaction.transaction_type == "income"
-    head = f"{'💰' if income else '💸'} {format_amount(transaction.amount, transaction.currency)}"
+    head = f"{'💰' if income else '💸'} {money(transaction.amount, transaction.currency)}"
     if transaction.merchant:
         head += f" — {esc(transaction.merchant)}"
     lines = [texts.SAVED_HEAD, head]
@@ -117,7 +126,7 @@ def settings_text(user: User) -> str:
 # --- Hisobot -------------------------------------------------------------------- #
 
 
-def _flow(totals: Totals) -> str:
+def _plain_flow(totals: Totals) -> str:
     parts = []
     if totals.income:
         parts.append(signed(totals.income, True))
@@ -126,13 +135,17 @@ def _flow(totals: Totals) -> str:
     return " / ".join(parts) or "0"
 
 
+def _flow(totals: Totals) -> str:
+    return bold(_plain_flow(totals))
+
+
 def _currency_block(report: CurrencyReport, tz: ZoneInfo) -> list[str]:
     currency, totals = report.currency, report.totals
     lines = [
         f"<b>{currency}</b>",
-        f"💰 Kirim: {format_amount(totals.income, currency)}",
-        f"💸 Chiqim: {format_amount(totals.expense, currency)}",
-        f"⚖️ Farq: {signed(abs(totals.net), totals.net >= 0)} {currency}",
+        f"💰 Kirim: {money(totals.income, currency)}",
+        f"💸 Chiqim: {money(totals.expense, currency)}",
+        f"⚖️ Farq: {bold(f'{signed(abs(totals.net), totals.net >= 0)} {currency}')}",
         "",
         "💳 <b>Kartalar bo‘yicha:</b>",
     ]
@@ -144,11 +157,11 @@ def _currency_block(report: CurrencyReport, tz: ZoneInfo) -> list[str]:
         for index, transaction in enumerate(report.top_expenses, start=1):
             what = esc(transaction.merchant or transaction.user_note or "—")[:60]
             day = transaction.occurred_at.astimezone(tz).strftime("%d.%m")
-            lines.append(f"{index}. {format_amount(transaction.amount, currency)} — {what} ({day})")
+            lines.append(f"{index}. {money(transaction.amount, currency)} — {what} ({day})")
     if report.top_merchants:
         lines += ["", "🏪 <b>Eng ko‘p ishlatilgan joylar:</b>"]
         lines += [
-            f"• {esc(stat.merchant)} — {stat.count} marta, {format_amount(stat.expense, currency)}"
+            f"• {esc(stat.merchant)} — {stat.count} marta, {money(stat.expense, currency)}"
             for stat in report.top_merchants
         ]
     return lines
@@ -198,19 +211,21 @@ def stats_text(stats: Stats) -> str:
         lines += [texts.REPORT_EMPTY, ""]
     for report in stats.report.currencies:
         currency, totals = report.currency, report.totals
-        lines.append(f"<b>{currency}</b>: 💰 {signed(totals.income, True)} · 💸 {signed(totals.expense, False)}")
+        lines.append(
+            f"<b>{currency}</b>: 💰 {bold(signed(totals.income, True))} · 💸 {bold(signed(totals.expense, False))}"
+        )
         spending = [item for item in report.by_category if item.totals.expense > 0]
         if spending:
             lines.append("🏷 Turlar bo‘yicha (chiqim):")
             for item in spending[:10]:
                 share = float(item.totals.expense / totals.expense)
                 lines.append(
-                    f"• {esc(item.label)} — {format_number(item.totals.expense)} ({share:.0%}) {_bar(share)}"
+                    f"• {esc(item.label)} — {bold(format_number(item.totals.expense))} ({share:.0%}) {_bar(share)}"
                 )
         if report.top_merchants:
             lines.append("🏪 Joylar bo‘yicha:")
             lines += [
-                f"• {esc(stat.merchant)} — {stat.count} marta, {format_number(stat.expense)}"
+                f"• {esc(stat.merchant)} — {stat.count} marta, {bold(format_number(stat.expense))}"
                 for stat in report.top_merchants
             ]
         lines.append("")
@@ -220,6 +235,6 @@ def stats_text(stats: Stats) -> str:
         if not month.totals:
             lines.append(f"{month.label}: —")
             continue
-        flows = [f"{_flow(totals)} {currency}" for currency, totals in sorted(month.totals.items())]
+        flows = [bold(f"{_plain_flow(totals)} {currency}") for currency, totals in sorted(month.totals.items())]
         lines.append(f"{month.label}: " + "; ".join(flows))
     return clip("\n".join(lines))

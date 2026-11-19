@@ -167,9 +167,9 @@ async def test_monthly_report_covers_all_cards(seeded):
     await seeded.click("Hamma turlar")
     report = seeded.last_text()
     assert "Noyabr 2026" in report
-    assert "Kirim: 1 000 000 UZS" in report
-    assert "Chiqim: 304 000 UZS" in report
-    assert "+696 000 UZS" in report
+    assert "Kirim: <b>1 000 000 UZS</b>" in report
+    assert "Chiqim: <b>304 000 UZS</b>" in report
+    assert "Farq: <b>+696 000 UZS</b>" in report
     assert "Asosiy Humo ****1234" in report and "Uzcard ish ****5678" in report
     assert "Ovqatlanish" in report and "P2P" in report and "Maosh" in report
     assert "KAMOLON OSH MARKAZI" in report
@@ -182,8 +182,8 @@ async def test_report_filtered_by_card(seeded):
     await seeded.click("Uzcard ish")
     await seeded.click("Hamma turlar")
     report = seeded.last_text()
-    assert "Chiqim: 250 000 UZS" in report
-    assert "Kirim: 0 UZS" in report
+    assert "Chiqim: <b>250 000 UZS</b>" in report
+    assert "Kirim: <b>0 UZS</b>" in report
     assert "Uzcard ish ****5678" in report
     assert "YANDEX GO" not in report
 
@@ -194,7 +194,7 @@ async def test_report_filtered_by_category(seeded):
     await seeded.click("Hamma kartalar")
     await seeded.click("Ovqatlanish")
     report = seeded.last_text()
-    assert "Chiqim: 250 000 UZS" in report
+    assert "Chiqim: <b>250 000 UZS</b>" in report
     assert "YANDEX GO" not in report
 
 
@@ -204,7 +204,7 @@ async def test_previous_month_report(seeded):
     await seeded.click("Hamma kartalar")
     await seeded.click("Hamma turlar")
     assert "Oktabr 2026" in seeded.last_text()
-    assert "Chiqim: 700 000 UZS" in seeded.last_text()
+    assert "Chiqim: <b>700 000 UZS</b>" in seeded.last_text()
 
 
 async def test_transaction_list_shows_every_label(seeded):
@@ -350,3 +350,11 @@ async def test_user_can_start_again_after_deleting_data(seeded, session_factory)
     await seeded.send("/start")
     assert await count(session_factory, User) == 1
     assert await count(session_factory, Category) == 9
+
+
+async def test_stat_amounts_are_bold(seeded):
+    await seeded.send("/stat")
+    text = seeded.last_text()
+    assert "💰 <b>+1 000 000</b>" in text and "💸 <b>−304 000</b>" in text
+    assert "Ovqatlanish — <b>250 000</b>" in text
+    assert "Noyabr 2026: <b>+1 000 000 / −304 000 UZS</b>" in text
