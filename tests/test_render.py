@@ -49,7 +49,7 @@ def test_report_breakdowns_and_top_lists_have_bold_amounts():
     text = render.report_text("Noyabr 2026", "", report, TZ)
     assert "• Asosiy Humo ****1234: <b>+1 000 000 / −250 000</b>" in text
     assert "• 🍽 Ovqatlanish: <b>+1 000 000 / −250 000</b> (2 ta)" in text
-    assert "1. <b>250 000 UZS</b> — KAMOLON (19.11)" in text
+    assert "1. <b>250 000 UZS</b> — Tushlik (19.11)" in text  # joy nomi emas, foydalanuvchi izohi
     assert "• KAMOLON — 1 marta, <b>250 000 UZS</b>" in text
 
 
@@ -69,3 +69,41 @@ def test_labels_and_merchants_stay_regular_weight():
     text = render.draft_summary(make_parsed(), TZ)
     assert "Joy: KAMOLON" in text
     assert "<b>KAMOLON" not in text
+
+
+# --- Foydalanuvchi bergan izoh (label) ro'yxatlarda ko'rinishi kerak ------------------ #
+
+
+def payme_tx() -> Transaction:
+    tx = make_tx(1, amount="32520", merchant="PAYME OPLATA, UZ")
+    tx.user_note = "Karzinkadan xarid: non,qatiq,kofe"
+    return tx
+
+
+def test_report_top_expenses_show_the_users_note():
+    text = render.report_text("Noyabr 2026", "", summarize([payme_tx()]), TZ)
+    assert "1. <b>32 520 UZS</b> — Karzinkadan xarid: non,qatiq,kofe (19.11)" in text
+
+
+def test_top_expenses_fall_back_to_merchant_without_a_note():
+    tx = payme_tx()
+    tx.user_note = None
+    text = render.report_text("Noyabr 2026", "", summarize([tx]), TZ)
+    assert "1. <b>32 520 UZS</b> — PAYME OPLATA, UZ (19.11)" in text
+
+
+def test_long_note_is_shortened_in_top_expenses():
+    tx = payme_tx()
+    tx.user_note = "x" * 200
+    line = next(l for l in render.report_text("N", "", summarize([tx]), TZ).splitlines() if l.startswith("1."))
+    assert "x" * 59 + "…" in line and "x" * 61 not in line
+
+
+def test_stats_list_largest_expenses_with_the_users_note():
+    from app.services.report_service import Stats
+
+    stats = Stats(report=summarize([payme_tx(), make_tx(2, amount="9000", merchant="YANDEX GO")]), trend=[])
+    text = render.stats_text(stats, TZ)
+    assert "Eng katta xarajatlar" in text
+    assert "1. <b>32 520</b> — Karzinkadan xarid: non,qatiq,kofe (19.11)" in text
+    assert "2. <b>9 000</b> — Tushlik (19.11)" in text

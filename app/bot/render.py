@@ -135,6 +135,16 @@ def _flow(totals: Totals) -> str:
     return bold(_plain_flow(totals))
 
 
+def _label(transaction: Transaction, limit: int = 60) -> str:
+    """Tranzaksiyaning nomi: foydalanuvchi yozgan izoh, u bo‘lmasa joy nomi."""
+    text = transaction.user_note or transaction.merchant or "—"
+    return esc(text if len(text) <= limit else text[: limit - 1] + "…")
+
+
+def _day(transaction: Transaction, tz: ZoneInfo) -> str:
+    return transaction.occurred_at.astimezone(tz).strftime("%d.%m")
+
+
 def _currency_block(report: CurrencyReport, tz: ZoneInfo) -> list[str]:
     currency, totals = report.currency, report.totals
     lines = [
@@ -155,9 +165,9 @@ def _currency_block(report: CurrencyReport, tz: ZoneInfo) -> list[str]:
     if report.top_expenses:
         lines += ["", "🔝 <b>Eng katta xarajatlar:</b>"]
         for index, transaction in enumerate(report.top_expenses, start=1):
-            what = esc(transaction.merchant or transaction.user_note or "—")[:60]
-            day = transaction.occurred_at.astimezone(tz).strftime("%d.%m")
-            lines.append(f"{index}. {money(transaction.amount, currency)} — {what} ({day})")
+            lines.append(
+                f"{index}. {money(transaction.amount, currency)} — {_label(transaction)} ({_day(transaction, tz)})"
+            )
     if report.top_merchants:
         lines += ["", "🏪 <b>Eng ko‘p ishlatilgan joylar:</b>"]
         lines += [
@@ -226,7 +236,7 @@ def _bar(share: float) -> str:
     return "▇" * max(1, round(share * 10))
 
 
-def stats_text(stats: Stats) -> str:
+def stats_text(stats: Stats, tz: ZoneInfo) -> str:
     lines = [f"📈 <b>Statistika</b> — {texts.BTN_LAST_30}", ""]
     if stats.report.count == 0:
         lines += [texts.REPORT_EMPTY, ""]
@@ -243,6 +253,12 @@ def stats_text(stats: Stats) -> str:
                 lines.append(
                     f"• {esc(item.label)} — {bold(format_number(item.totals.expense))} ({share:.0%}) {_bar(share)}"
                 )
+        if report.top_expenses:
+            lines.append("🔝 Eng katta xarajatlar:")
+            lines += [
+                f"{index}. {bold(format_number(item.amount))} — {_label(item)} ({_day(item, tz)})"
+                for index, item in enumerate(report.top_expenses, start=1)
+            ]
         if report.top_merchants:
             lines.append("🏪 Joylar bo‘yicha:")
             lines += [

@@ -414,3 +414,9 @@ async def test_settings_toggle_daily_report(bot, session_factory):
     async with session_factory() as session:
         user = await session.scalar(select(User))
     assert (user.daily_report_enabled, user.weekly_report_enabled, user.notifications_enabled) == (False, True, True)
+
+
+async def test_stat_shows_the_note_the_user_gave(seeded):
+    await seeded.send("/stat")
+    text = seeded.last_text()
+    assert "Kamolonda ovqatlandik 3 kishi" in text and "Taksi — uyga qaytish" in text

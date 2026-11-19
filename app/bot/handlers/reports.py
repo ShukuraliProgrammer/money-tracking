@@ -195,7 +195,7 @@ async def on_report_picture(
 async def cmd_stat(message: Message, state: FSMContext, session: AsyncSession, user: User, clock: Clock) -> None:
     await state.clear()
     stats = await rs.build_stats(session, user.id, user.tz, clock(), user.preferred_currency)
-    await message.answer(render.stats_text(stats))
+    await message.answer(render.stats_text(stats, user.tz))
 
 
 async def cmd_export(message: Message, state: FSMContext) -> None:
