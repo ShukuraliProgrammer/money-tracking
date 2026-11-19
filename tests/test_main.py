@@ -39,3 +39,11 @@ def test_run_migrations_creates_tables(tmp_path):
     with engine.connect() as connection:
         assert "transactions" in sa.inspect(connection).get_table_names()
     engine.dispose()
+
+
+def test_empty_bot_token_stops_startup_with_a_clear_message(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BOT_TOKEN", "")
+    with pytest.raises(SystemExit) as exit_info:
+        app_main.main()
+    assert "BOT_TOKEN" in str(exit_info.value)

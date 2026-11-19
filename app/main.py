@@ -15,6 +15,7 @@ from aiogram.exceptions import TelegramNetworkError, TelegramUnauthorizedError
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
+from aiogram.utils.token import TokenValidationError, validate_token
 from alembic import command
 from alembic.config import Config
 from pydantic import ValidationError
@@ -92,6 +93,13 @@ async def run(settings: Settings) -> None:
         await engine.dispose()
 
 
+def validate_bot_token(token: str) -> bool:
+    try:
+        return validate_token(token)
+    except TokenValidationError:
+        return False
+
+
 def main() -> None:
     try:
         settings = get_settings()
@@ -101,6 +109,8 @@ def main() -> None:
             f"Sozlamalar to‘liq emas yoki noto‘g‘ri: {names}. .env.example faylidan nusxa olib, .env ni to‘ldiring."
         ) from None
     setup_logging(settings.log_level)
+    if not validate_bot_token(settings.bot_token.get_secret_value()):
+        raise SystemExit("BOT_TOKEN bo‘sh yoki noto‘g‘ri ko‘rinishda. .env faylida @BotFather bergan tokenni yozing.")
     try:
         get_cipher()  # kalit noto‘g‘ri bo‘lsa, bot ishga tushmasdan oldin aniq xato beradi
     except ValueError as error:

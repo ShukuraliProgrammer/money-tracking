@@ -138,6 +138,60 @@ Vaqtlar foydalanuvchining vaqt zonasi bo‘yicha (`/settings`).
 - Bot belgilangan vaqtda ishlamay turgan bo‘lsa, haftalik va oylik hisobot keyingi tekshiruvda (har 30 daqiqada) yuboriladi. Kunlik hisobot faqat o‘sha kuni 21:00–24:00 orasida yuboriladi.
 - 21:00 dan keyingi tranzaksiyalar o‘sha kungi kunlik hisobotga kirmaydi, lekin haftalik va oylik hisobotda bo‘ladi.
 
+## Serverga joylash (CI/CD)
+
+GitHub Actions testlarni ishga tushiradi va o‘tsa, kodni serverga ko‘chirib botni qayta yig‘adi (`.github/workflows/deploy.yml`). Deploy `main` branchiga push bo‘lganda yoki Actions sahifasidagi **Run workflow** tugmasi bilan ishlaydi.
+
+Domen kerak emas: bot Telegram’dan xabarlarni o‘zi so‘rab oladi, serverga tashqaridan hech kim ulanmaydi. Parol ham ishlatilmaydi: GitHub serverga SSH kalit bilan kiradi. Bot tokeni va boshqa sozlamalar GitHub’da emas, serverdagi `.env` faylida turadi.
+
+**1. Deploy kalitini yarating** (o‘z kompyuteringizda):
+
+```bash
+ssh-keygen -t ed25519 -N "" -C moneytrack-deploy -f moneytrack_deploy
+```
+
+`moneytrack_deploy` — maxfiy kalit (GitHub’ga), `moneytrack_deploy.pub` — ochiq kalit (serverga).
+
+**2. Serverni tayyorlang** (Ubuntu yoki Debian, bir marta). `SERVER_IP` o‘rniga server manzilini yozing:
+
+```bash
+scp deploy/server-setup.sh root@SERVER_IP:/root/
+```
+
+```bash
+ssh root@SERVER_IP "bash /root/server-setup.sh '$(cat moneytrack_deploy.pub)'"
+```
+
+Skript Docker’ni o‘rnatadi (bo‘lmasa), `deploy` foydalanuvchisini va `/opt/moneytrack` papkasini yaratadi, `.env` faylini shifrlash kaliti bilan tayyorlaydi. Oxirida GitHub’ga kiritiladigan qiymatlarni chiqarib beradi.
+
+**3. Bot tokenini yozing** (serverda):
+
+```bash
+ssh root@SERVER_IP "nano /opt/moneytrack/.env"
+```
+
+`BOT_TOKEN=` qatoriga @BotFather bergan tokenni qo‘ying. LLM kaliti kabi boshqa sozlamalar ham shu faylga yoziladi (`.env.example` ga qarang).
+
+**4. GitHub’da sirlarni kiriting** (repo → Settings → Secrets and variables → Actions → New repository secret):
+
+| Nomi | Qiymati |
+|---|---|
+| `DEPLOY_HOST` | server IP manzili |
+| `DEPLOY_USER` | `deploy` |
+| `DEPLOY_SSH_KEY` | `moneytrack_deploy` faylining to‘liq mazmuni |
+| `DEPLOY_KNOWN_HOSTS` | ixtiyoriy, lekin tavsiya etiladi: skript chiqargan `<server IP> ssh-ed25519 …` qatori |
+| `DEPLOY_PORT`, `DEPLOY_PATH` | ixtiyoriy: SSH porti (22) va papka (`/opt/moneytrack`) standartdan farq qilsa |
+
+**5. Ishga tushiring:** GitHub → Actions → **CI/CD** → **Run workflow**. Keyin har safar `main`’ga push bo‘lganda o‘zi ishlaydi.
+
+Deploy bot 20 soniya davomida yiqilmay ishlab turganini tekshiradi; yiqilsa, xato bilan tugaydi va oxirgi loglarni ko‘rsatadi.
+
+Eslatmalar:
+
+- **Bitta nusxa.** Bir token bilan bir vaqtda faqat bitta bot ishlashi mumkin. Serverga o‘tkazgach, kompyuteringizdagi yoki eski joydagi botni to‘xtating (`docker compose down`).
+- **Mavjud ma’lumotlar.** Bot shu serverda boshqa papkada ishlab turgan bo‘lsa, `DEPLOY_PATH` sirini o‘sha papkaga qo‘ying — `.env` va baza joyida qoladi. Boshqa mashinadan ko‘chirayotgan bo‘lsangiz, `moneytrack.db` faylini va eski `ENCRYPTION_KEY`’ni birga olib o‘ting; kalit boshqa bo‘lsa, eski izohlar o‘qilmaydi.
+- **Xavfsizlik.** Hammasi ishlagach, serverda SSH’ga parol bilan kirishni o‘chirib qo‘yish tavsiya etiladi.
+
 ## Xabar qanday o‘qiladi
 
 1. **Tozalash.** 13–19 xonali karta raqamlari `****1234` ko‘rinishiga keltiriladi. SMS kod, parol, PIN yoki CVV ga o‘xshash xabar umuman qayta ishlanmaydi.
