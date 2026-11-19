@@ -327,7 +327,7 @@ async def test_settings_are_compact(bot):
     assert "Asia/Tashkent" in text and "UZS" in text
     assert "Til:" not in text  # bitta til bor, uni ko'rsatish shart emas
     labels = " | ".join(bot.buttons())
-    assert "Kunlik ✅" in labels and "Haftalik ✅" in labels and "Oylik ✅" in labels
+    assert "Kunlik hisobot ✅" in labels and "Haftalik hisobot ✅" in labels and "Oylik hisobot ✅" in labels
 
 
 async def test_settings_change_currency_timezone_and_notifications(bot, session_factory):
@@ -337,7 +337,7 @@ async def test_settings_change_currency_timezone_and_notifications(bot, session_
     await bot.click("Vaqt zonasi")
     await bot.send("Asia/Samarkand")
     await bot.click("Oylik")
-    assert any("Oylik ❌" in b for b in bot.buttons())
+    assert any("Oylik hisobot ❌" in b for b in bot.buttons())
     async with session_factory() as session:
         user = await session.scalar(select(User))
     assert (user.preferred_currency, user.timezone, user.notifications_enabled) == ("USD", "Asia/Samarkand", False)
@@ -401,7 +401,7 @@ async def test_empty_report_offers_no_picture(bot):
 async def test_settings_toggle_weekly_report(bot, session_factory):
     await bot.send("/settings")
     await bot.click("Haftalik")
-    assert any("Haftalik ❌" in b for b in bot.buttons())
+    assert any("Haftalik hisobot ❌" in b for b in bot.buttons())
     async with session_factory() as session:
         user = await session.scalar(select(User))
     assert (user.weekly_report_enabled, user.notifications_enabled) == (False, True)
@@ -410,7 +410,7 @@ async def test_settings_toggle_weekly_report(bot, session_factory):
 async def test_settings_toggle_daily_report(bot, session_factory):
     await bot.send("/settings")
     await bot.click("Kunlik")
-    assert any("Kunlik ❌" in b for b in bot.buttons())
+    assert any("Kunlik hisobot ❌" in b for b in bot.buttons())
     async with session_factory() as session:
         user = await session.scalar(select(User))
     assert (user.daily_report_enabled, user.weekly_report_enabled, user.notifications_enabled) == (False, True, True)
@@ -445,3 +445,15 @@ async def test_transaction_list_lines_are_emoji_led(seeded):
     await seeded.send("/report")
     await seeded.click("Tranzaksiyalar")
     assert "🍽 Ovqatlanish · 📍 KAMOLON OSH MARKAZI · 💳 ****5678" in seeded.last_text()
+
+
+async def test_no_keyboard_puts_long_labels_side_by_side(seeded):
+    """Telegram sig'magan tugma yozuvini «K…k» qilib qisqartiradi: yonma-yon faqat qisqa yozuvlar turadi."""
+    screens = ["/settings", "/cards", "/categories", "/report", samples.HUMO_EXPENSE.replace("12:01", "13:13")]
+    for screen in screens:
+        await seeded.send(screen)
+        for row in seeded.last_with_keyboard().reply_markup.inline_keyboard:
+            assert len(row) == 1 or all(len(button.text) <= 14 for button in row), [b.text for b in row]
+    await seeded.send("Izoh")  # tur tanlash klaviaturasi
+    for row in seeded.last_with_keyboard().reply_markup.inline_keyboard:
+        assert len(row) == 1 or all(len(button.text) <= 14 for button in row), [b.text for b in row]

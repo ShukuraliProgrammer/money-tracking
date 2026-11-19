@@ -306,9 +306,9 @@ SETTINGS = (
 )
 BTN_TIMEZONE = "🕓 Vaqt zonasi"
 BTN_CURRENCY = "💱 Valyuta"
-BTN_NOTIFICATIONS = "🗓 Oylik {mark}"
-BTN_WEEKLY = "📆 Haftalik {mark}"
-BTN_DAILY = "🌙 Kunlik {mark}"
+BTN_NOTIFICATIONS = "🗓 Oylik hisobot {mark}"
+BTN_WEEKLY = "📆 Haftalik hisobot {mark}"
+BTN_DAILY = "🌙 Kunlik hisobot {mark}"
 MARK_ON = "✅"
 MARK_OFF = "❌"
 BTN_WIPE = "🗑 Ma’lumotlarimni o‘chirish"

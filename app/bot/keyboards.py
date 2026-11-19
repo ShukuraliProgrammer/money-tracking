@@ -16,6 +16,23 @@ def _button(text: str, data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, callback_data=data)
 
 
+# Telegram bir qatordagi tugmalarga teng joy beradi va sig‘magan yozuvni «K…k» qilib qisqartiradi.
+# Shuning uchun yonma-yon faqat qisqa yozuvli tugmalar qo‘yiladi (telefon ekranida tekshirilgan chegara).
+PAIR_LIMIT = 14
+
+
+def _fit_rows(buttons: list[InlineKeyboardButton]) -> list[list[InlineKeyboardButton]]:
+    """Qisqa yozuvli tugmalarni ikkitadan, uzunlarini alohida qatorga joylaydi."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for button in buttons:
+        fits = len(button.text) <= PAIR_LIMIT
+        if fits and rows and len(rows[-1]) == 1 and len(rows[-1][0].text) <= PAIR_LIMIT:
+            rows[-1].append(button)
+        else:
+            rows.append([button])
+    return rows
+
+
 def _cancel_row() -> list[InlineKeyboardButton]:
     return [_button(texts.BTN_CANCEL, "tx:cancel")]
 
@@ -71,24 +88,22 @@ def duplicate_choice() -> InlineKeyboardMarkup:
 
 def edit_menu(is_income: bool) -> InlineKeyboardMarkup:
     flip = texts.BTN_TO_EXPENSE if is_income else texts.BTN_TO_INCOME
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [_button(texts.BTN_EDIT_AMOUNT, "tx:ed:amount"), _button(texts.BTN_EDIT_MERCHANT, "tx:ed:merchant")],
-            [_button(texts.BTN_EDIT_DATE, "tx:ed:date"), _button(flip, "tx:ed:type")],
-            [_button(texts.BTN_BACK, "tx:ed:back")],
-        ]
-    )
+    fields = [
+        _button(texts.BTN_EDIT_AMOUNT, "tx:ed:amount"),
+        _button(texts.BTN_EDIT_MERCHANT, "tx:ed:merchant"),
+        _button(texts.BTN_EDIT_DATE, "tx:ed:date"),
+        _button(flip, "tx:ed:type"),
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[*_fit_rows(fields), [_button(texts.BTN_BACK, "tx:ed:back")]])
 
 
 def category_choice(categories: list[Category], suggested_id: int | None) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for category in categories:
-        star = "⭐ " if category.id == suggested_id else ""
-        builder.add(_button(f"{star}{category.emoji} {category.name}", f"tx:cat:{category.id}"))
-    builder.adjust(2)
-    builder.row(_button(texts.BTN_NEW_CATEGORY, "tx:cat:new"))
-    builder.row(*_cancel_row())
-    return builder.as_markup()
+    choices = [
+        _button(f"{'⭐ ' if category.id == suggested_id else ''}{category.emoji} {category.name}", f"tx:cat:{category.id}")
+        for category in categories
+    ]
+    rows = [*_fit_rows(choices), [_button(texts.BTN_NEW_CATEGORY, "tx:cat:new")], _cancel_row()]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def card_choice(cards: list[Card]) -> InlineKeyboardMarkup:
@@ -99,11 +114,8 @@ def card_choice(cards: list[Card]) -> InlineKeyboardMarkup:
 
 
 def delete_confirm(transaction_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [_button(texts.BTN_DELETE_YES, f"del:yes:{transaction_id}"), _button(texts.BTN_NO, "del:no")]
-        ]
-    )
+    choices = [_button(texts.BTN_DELETE_YES, f"del:yes:{transaction_id}"), _button(texts.BTN_NO, "del:no")]
+    return InlineKeyboardMarkup(inline_keyboard=_fit_rows(choices))
 
 
 # --- Kartalar ------------------------------------------------------------------ #
@@ -113,7 +125,7 @@ def cards_menu(cards: list[Card]) -> InlineKeyboardMarkup:
     rows = []
     for card in cards:
         toggle = "⏸" if card.is_active else "▶️"
-        rows.append(
+        rows += _fit_rows(
             [
                 _button(f"{toggle} {card.name}", f"card:toggle:{card.id}"),
                 _button(f"🗑 {card.name}", f"card:del:{card.id}"),
@@ -152,13 +164,10 @@ def currency_choice(prefix: str) -> InlineKeyboardMarkup:
 
 
 def categories_menu(categories: list[Category]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for category in categories:
-        if not category.is_default:
-            builder.add(_button(f"🗑 {category.name}", f"cat:del:{category.id}"))
-    builder.adjust(2)
-    builder.row(_button(texts.BTN_NEW_CATEGORY, "cat:add"))
-    return builder.as_markup()
+    removable = [
+        _button(f"🗑 {category.name}", f"cat:del:{category.id}") for category in categories if not category.is_default
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[*_fit_rows(removable), [_button(texts.BTN_NEW_CATEGORY, "cat:add")]])
 
 
 # --- Hisobot ----------------------------------------------------------------------- #
@@ -195,7 +204,7 @@ def report_summary_actions(key: ReportKey, count: int) -> InlineKeyboardMarkup:
         rows.append([_button(texts.BTN_TRANSACTIONS.format(count=count), f"rpv:{key.data}:1")])
         rows.append([_button(texts.BTN_PICTURE, f"rpi:{key.data}"), _button(texts.BTN_CSV, f"rpx:{key.data}")])
     rows.append([_button(f"📅 {key.period_label}", f"rpp:{key.data}")])
-    rows.append(
+    rows += _fit_rows(
         [
             _button(_short(f"💳 {key.card_label}"), f"rpc:{key.data}"),
             _button(_short(key.category_label), f"rpg:{key.data}"),
@@ -237,14 +246,9 @@ def report_categories(key: ReportKey, categories: list[Category]) -> InlineKeybo
     def pick(label: str, category_id: int) -> InlineKeyboardButton:
         return _button(label, f"rpv:{key.period}:{key.card_id}:{category_id}:0")
 
-    builder = InlineKeyboardBuilder()
-    for category in categories:
-        builder.add(pick(f"{category.emoji} {category.name}", category.id))
-    builder.adjust(2)
-    markup = builder.as_markup()
-    markup.inline_keyboard.insert(0, [pick(f"🏷 {texts.ALL_CATEGORIES}", 0)])
-    markup.inline_keyboard.append(_back(key))
-    return markup
+    choices = [pick(f"{category.emoji} {category.name}", category.id) for category in categories]
+    rows = [[pick(f"🏷 {texts.ALL_CATEGORIES}", 0)], *_fit_rows(choices), _back(key)]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def report_list_actions(key: ReportKey, page: int, pages: int) -> InlineKeyboardMarkup:
@@ -277,11 +281,10 @@ def settings_menu(daily_enabled: bool, weekly_enabled: bool, monthly_enabled: bo
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [_button(texts.BTN_TIMEZONE, "set:tz"), _button(texts.BTN_CURRENCY, "set:cur")],
-            [
-                _button(texts.BTN_DAILY.format(mark=mark(daily_enabled)), "set:daily"),
-                _button(texts.BTN_WEEKLY.format(mark=mark(weekly_enabled)), "set:weekly"),
-                _button(texts.BTN_NOTIFICATIONS.format(mark=mark(monthly_enabled)), "set:notif"),
-            ],
+            # Har biri alohida qatorda: uchtasi yonma-yon sig‘may, yozuvi qisqarib qolar edi.
+            [_button(texts.BTN_DAILY.format(mark=mark(daily_enabled)), "set:daily")],
+            [_button(texts.BTN_WEEKLY.format(mark=mark(weekly_enabled)), "set:weekly")],
+            [_button(texts.BTN_NOTIFICATIONS.format(mark=mark(monthly_enabled)), "set:notif")],
             [_button(texts.BTN_WIPE, "set:wipe")],
         ]
     )
@@ -291,12 +294,8 @@ TIMEZONES = ("Asia/Tashkent", "Asia/Samarkand", "Asia/Almaty", "Europe/Moscow", 
 
 
 def timezone_choice() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for name in TIMEZONES:
-        builder.add(_button(name, f"set:tz:{name}"))
-    builder.adjust(2)
-    builder.row(_button(texts.BTN_BACK, "set:menu"))
-    return builder.as_markup()
+    zones = [_button(name, f"set:tz:{name}") for name in TIMEZONES]
+    return InlineKeyboardMarkup(inline_keyboard=[*_fit_rows(zones), [_button(texts.BTN_BACK, "set:menu")]])
 
 
 def wipe_confirm() -> InlineKeyboardMarkup:
