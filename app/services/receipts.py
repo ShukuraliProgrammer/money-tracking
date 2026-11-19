@@ -76,7 +76,9 @@ def label_value_pairs(text: str) -> list[tuple[str, str]]:
         return columns
     pairs = []
     for line in lines:
-        match = _INLINE_KNOWN.match(line) or _INLINE_COLON.match(line)
+        # Ikki nuqta bo‘lsa, sarlavha undan oldingi butun matn («Сумма комиссии: …»); ma’lum sarlavhalar
+        # ro‘yxati faqat ikki nuqtasiz qatorlar uchun.
+        match = _INLINE_COLON.match(line) or _INLINE_KNOWN.match(line)
         if match:
             pairs.append((match.group(1).strip(), match.group(2).strip()))
     return pairs
