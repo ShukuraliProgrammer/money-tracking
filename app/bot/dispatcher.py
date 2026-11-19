@@ -10,7 +10,7 @@ from aiogram import Dispatcher, F, Router
 from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.base import BaseStorage
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.types import CallbackQuery, ErrorEvent, Message
 from aiogram.utils.callback_answer import CallbackAnswer, CallbackAnswerMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -65,7 +65,9 @@ def build_dispatcher(
     default_timezone: str = "Asia/Tashkent",
     default_currency: str = "UZS",
 ) -> Dispatcher:
-    dispatcher = Dispatcher(storage=storage or MemoryStorage())
+    # Bir foydalanuvchining xabarlari navbat bilan qayta ishlanadi: bir nechta xabar birdaniga
+    # forward qilinganda ular bir-birining qoralamasini buzmaydi.
+    dispatcher = Dispatcher(storage=storage or MemoryStorage(), events_isolation=SimpleEventIsolation())
     dispatcher["parser"] = parser
     dispatcher["note_analyzer"] = note_analyzer
     dispatcher["clock"] = clock or _utcnow

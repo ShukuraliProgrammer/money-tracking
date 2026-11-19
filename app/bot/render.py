@@ -10,6 +10,7 @@ from app.bot import texts
 from app.models import Card, Category, Transaction, User
 from app.schemas import ParsedTransaction
 from app.services.report_service import CurrencyReport, Report, Stats, Totals
+from app.services.transfers import Leg
 from app.utils.dates import format_dt
 from app.utils.money import format_amount, format_number
 
@@ -87,6 +88,15 @@ def saved_summary(transaction: Transaction, tz: ZoneInfo) -> str:
     lines.append(f"Karta: {esc(card_title(transaction.card))}" if transaction.card else f"Karta: {texts.BTN_NO_CARD}")
     lines.append(f"Vaqt: {format_dt(transaction.occurred_at, tz)}")
     return "\n".join(lines)
+
+
+def transfer_route(sent: Leg, received: Leg) -> str:
+    """«****1234 → ****5678, 1 000 000 UZS» (+ komissiya, agar farq bo‘lsa)."""
+    cards = " → ".join(f"****{leg.card_last4}" if leg.card_last4 else "—" for leg in (sent, received))
+    text = f"{cards}, {money(received.amount, received.currency)}"
+    if sent.amount > received.amount:
+        text += texts.TRANSFER_FEE.format(fee=format_amount(sent.amount - received.amount, sent.currency))
+    return text
 
 
 # --- Kartalar, turlar, sozlamalar -------------------------------------------- #

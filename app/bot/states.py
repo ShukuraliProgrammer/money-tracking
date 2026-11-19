@@ -9,6 +9,7 @@ class TxFlow(StatesGroup):
     waiting_type = State()
     waiting_date = State()
     waiting_duplicate = State()
+    waiting_transfer = State()  # «O‘z kartalaringiz orasidagi o‘tkazmami?»
     waiting_note = State()  # «Nima uchun qilindi?»
     edit_menu = State()
     waiting_merchant = State()

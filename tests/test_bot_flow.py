@@ -480,3 +480,108 @@ async def test_llm_fills_gaps_for_free_text_only(session_factory):
     await bot.send("Kamolonda ovqatlandik 3 kishi")
     starred = [b for b in bot.buttons() if "⭐" in b]
     assert len(starred) == 1 and "Ovqatlanish" in starred[0]
+
+
+# --- O'z kartalar orasidagi o'tkazma ------------------------------------------------ #
+
+
+async def test_summary_offers_own_transfer_button_that_records_nothing(bot, session_factory):
+    await bot.send(samples.TRANSFER_OUT)
+    assert any("O‘z kartamga o‘tkazma" in b for b in bot.buttons())
+    await bot.click("O‘z kartamga o‘tkazma")
+    assert "yozilmadi" in bot.last_text()
+    assert await transactions(session_factory) == []
+    await bot.send(samples.HUMO_EXPENSE)  # holat tozalangan: keyingi xabar yangi tranzaksiya
+    assert "Nima uchun qilindi?" in bot.last_text()
+
+
+async def test_second_side_arriving_while_first_is_pending_is_recognized(bot, session_factory):
+    await bot.send(samples.TRANSFER_OUT)
+    await bot.send(samples.TRANSFER_IN)
+    prompt = bot.last_text()
+    assert "o‘tkazmaga o‘xshaydi" in prompt
+    assert "****1234 → ****5678" in prompt and "1 000 000 UZS" in prompt
+    await bot.click("Ha, yozilmasin")
+    assert "yozilmadi" in bot.last_text()
+    assert await transactions(session_factory) == []
+    await bot.send(samples.HUMO_EXPENSE)
+    assert "Nima uchun qilindi?" in bot.last_text()
+
+
+async def test_sides_can_arrive_in_either_order(bot, session_factory):
+    await bot.send(samples.TRANSFER_IN)
+    await bot.send(samples.TRANSFER_OUT)
+    assert "****1234 → ****5678" in bot.last_text()
+
+
+async def test_declining_pending_pair_keeps_first_transaction_in_progress(bot, session_factory):
+    await bot.send(samples.TRANSFER_OUT)
+    await bot.send(samples.TRANSFER_IN)
+    await bot.click("Yo‘q")
+    assert "Avval" in bot.last_text()
+    await bot.send("Akamga o‘tkazdim")
+    await bot.click("P2P")
+    await bot.click("Kartasiz")
+    (tx,) = await transactions(session_factory)
+    assert tx.transaction_type == "expense" and tx.user_note == "Akamga o‘tkazdim"
+
+
+async def test_second_side_matching_a_saved_transaction_removes_both(bot, session_factory):
+    await add_card(session_factory, last4="1234", name="Asosiy Humo")
+    await save_humo_expense(bot, note="O‘tkazma", card="1234", text=samples.TRANSFER_OUT)
+    assert len(await transactions(session_factory)) == 1
+    await bot.send(samples.TRANSFER_IN)
+    prompt = bot.last_text()
+    assert "o‘tkazmaga o‘xshaydi" in prompt and "****1234 → ****5678" in prompt
+    assert "Avval saqlangan" in prompt
+    await bot.click("Ha, yozilmasin")
+    assert "yozilmadi" in bot.last_text()
+    assert await transactions(session_factory) == []
+
+
+async def test_declining_saved_pair_continues_as_a_normal_transaction(bot, session_factory):
+    await save_humo_expense(bot, note="Akamga", text=samples.TRANSFER_OUT)
+    await bot.send(samples.TRANSFER_IN)
+    await bot.click("Yo‘q")
+    assert "Kirim aniqlandi" in bot.last_text() and "Nima uchun qilindi?" in bot.last_text()
+    await bot.send("Do‘stim qaytardi")
+    await bot.click("P2P")
+    await bot.click("Kartasiz")
+    assert len(await transactions(session_factory)) == 2
+
+
+async def test_transfer_fee_is_shown_but_nothing_is_recorded(bot, session_factory):
+    await bot.send(samples.TRANSFER_OUT.replace("1.000.000,00", "1.010.000,00"))
+    await bot.send(samples.TRANSFER_IN)
+    prompt = bot.last_text()
+    assert "komissiya" in prompt.lower() and "10 000 UZS" in prompt
+    await bot.click("Ha, yozilmasin")
+    assert await transactions(session_factory) == []
+
+
+async def test_unrelated_income_is_not_mistaken_for_a_transfer(bot, session_factory):
+    await save_humo_expense(bot, note="O‘tkazma", text=samples.TRANSFER_OUT)
+    await bot.send(samples.TRANSFER_IN.replace("1.000.000,00", "750.000,00"))
+    assert "o‘tkazmaga o‘xshaydi" not in bot.last_text()
+    assert "Nima uchun qilindi?" in bot.last_text()
+
+
+async def test_old_transfer_button_cannot_discard_a_newer_draft(bot, session_factory):
+    await bot.send(samples.TRANSFER_OUT)
+    await bot.send(samples.TRANSFER_IN)
+    stale_prompt = bot.last_with_keyboard()
+    await bot.click("Yo‘q")
+    await bot.click("Bekor qilish")
+    await bot.send(samples.HUMO_EXPENSE)
+    await bot.click_data("tx:trp:yes", stale_prompt)
+    await bot.send("Taksi")
+    assert "Qaysi turga kiradi?" in bot.last_text()  # yangi qoralama joyida
+
+
+async def test_both_sides_forwarded_at_once_are_handled_in_order(bot, session_factory):
+    import asyncio
+
+    await asyncio.gather(bot.send(samples.TRANSFER_OUT), bot.send(samples.TRANSFER_IN))
+    assert "o‘tkazmaga o‘xshaydi" in bot.last_text()
+    await bot.click("Ha, yozilmasin")
+    assert await transactions(session_factory) == []

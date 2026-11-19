@@ -28,3 +28,18 @@ BANK_SMS_UZ = "Karta *4321: xarid 150 000 so'm, KORZINKA. 19.11.2026 10:15. Qold
 BANK_SMS_RU = "Покупка 150 000 сум. Карта *1234. 19.11.2026 10:15. Доступно: 1 000 000 сум"
 
 MANUAL_FOOD = "Kamolonda 250 ming so'm ovqatlandik"
+
+# O'z kartalar orasidagi o'tkazma: bir kartadan chiqim, boshqasiga shu summada kirim.
+TRANSFER_OUT = """💸 Perevod
+➖ 1.000.000,00 UZS
+📍 P2P HUMO UZCARD
+💳 HUMOCARD *1234
+🕓 12:01 19.11.2026
+💰 234.567,00 UZS"""
+
+TRANSFER_IN = """🎉 Popolnenie
+➕ 1.000.000,00 UZS
+📍 P2P HUMO UZCARD
+💳 HUMOCARD *5678
+🕓 12:02 19.11.2026
+💰 1.526.871,58 UZS"""

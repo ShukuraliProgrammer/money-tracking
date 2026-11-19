@@ -108,6 +108,22 @@ FUTURE_DATE = "Sana kelajakda bo‘lishi mumkin emas. Qaytadan yozing."
 DUPLICATE_WARNING = "⚠️ Bunga o‘xshash tranzaksiya allaqachon saqlangan:\n{line}\n\nBaribir saqlaymi?"
 BTN_SAVE_ANYWAY = "Ha, baribir saqlash"
 BTN_DROP = "Yo‘q, bekor qilish"
+BTN_OWN_TRANSFER = "🔁 O‘z kartamga o‘tkazma"
+OWN_TRANSFER_SKIPPED = "🔁 O‘z kartalaringiz orasidagi o‘tkazma — hisobotga yozilmadi."
+TRANSFER_SUSPECTED_PENDING = (
+    "🔁 Bu ikki xabar o‘z kartalaringiz orasidagi o‘tkazmaga o‘xshaydi:\n{route}\n\n"
+    "Ikkalasi ham hisobotga yozilmasinmi?"
+)
+TRANSFER_SUSPECTED_SAVED = (
+    "🔁 Bu o‘z kartalaringiz orasidagi o‘tkazmaga o‘xshaydi:\n{route}\n\n"
+    "Avval saqlangan qismi:\n{line}\n\n"
+    "Ikkalasi ham hisobotga yozilmasinmi?"
+)
+TRANSFER_FEE = " (komissiya {fee})"
+BTN_TRANSFER_YES = "Ha, yozilmasin"
+BTN_TRANSFER_NO = "Yo‘q, alohida tranzaksiya"
+TRANSFER_DROPPED = "🔁 O‘tkazma hisobotga yozilmadi."
+TRANSFER_DROPPED_WITH_SAVED = "🔁 O‘tkazma hisobotga yozilmadi. Avval saqlangan qismi ham o‘chirildi."
 EDIT_MENU = "Nimani tuzatamiz?"
 BTN_EDIT_AMOUNT = "Summa"
 BTN_EDIT_MERCHANT = "Joy"

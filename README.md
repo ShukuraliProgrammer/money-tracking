@@ -24,6 +24,7 @@ Bot:  ✅ Saqlandi
 - **Uch savol:** nima uchun qilindi (izoh), qaysi turga kiradi, qaysi kartadan.
 - **Hisobot:** `/report` — davr → karta → tur bo‘yicha filtr; yig‘indilar, kartalar va turlar bo‘yicha taqsimot, eng katta xarajatlar, har bir tranzaksiya izohi bilan ro‘yxat, CSV.
 - **Avtomatik hisobotlar:** har kuni 21:00 da kunlik (matn), har dushanba haftalik va har oyning 1-kuni oylik (rasm + matn). Har biri `/settings` da alohida o‘chiriladi.
+- **O‘z kartalar orasidagi o‘tkazma:** hisobotga yozilmaydi. Xulosadagi «O‘z kartamga o‘tkazma» tugmasi bilan, yoki ikkala tomonni tashlasangiz (bir kartadan chiqim, boshqasiga shu summada kirim, orasi 10 daqiqagacha) bot o‘zi sezib so‘raydi. Jo‘natuvchi tomondagi 2% gacha komissiya farqi ham shu juftlik deb olinadi va yozilmaydi.
 - **O‘rganish:** bir joy uchun tanlangan tur keyingi safar ⭐ bilan taklif qilinadi.
 - **Kartalar va turlar:** bir nechta karta, o‘z turlaringiz.
 - **Maxfiylik:** to‘liq karta raqami saqlanmaydi, izoh va asl xabar shifrlanadi, `/settings` orqali hamma ma’lumotni o‘chirish mumkin.
@@ -185,6 +186,7 @@ app/
 │   ├── parser.py           qoidalar + LLM zaxirasi
 │   ├── llm.py              promptlar, Anthropic/OpenAI mijozlari
 │   ├── notes.py            izoh tahlili (kishi soni, takrorlanish, tur taklifi)
+│   ├── transfers.py        o‘z kartalar orasidagi o‘tkazmani tanish
 │   ├── transaction_service.py
 │   ├── report_service.py
 │   ├── chart_service.py    hisobot rasmi (Pillow)

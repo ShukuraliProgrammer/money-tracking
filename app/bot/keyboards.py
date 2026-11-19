@@ -22,7 +22,21 @@ def _cancel_row() -> list[InlineKeyboardButton]:
 
 
 def draft_actions() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[_button(texts.BTN_EDIT, "tx:edit"), *_cancel_row()]])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [_button(texts.BTN_EDIT, "tx:edit"), *_cancel_row()],
+            [_button(texts.BTN_OWN_TRANSFER, "tx:own")],
+        ]
+    )
+
+
+def transfer_choice(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [_button(texts.BTN_TRANSFER_YES, f"{prefix}:yes")],
+            [_button(texts.BTN_TRANSFER_NO, f"{prefix}:no")],
+        ]
+    )
 
 
 def cancel_only() -> InlineKeyboardMarkup:

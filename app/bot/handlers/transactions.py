@@ -35,6 +35,7 @@ from app.schemas import NoteAnalysis, ParsedTransaction
 from app.services import transaction_service as ts
 from app.services.notes import NoteAnalyzer
 from app.services.parser import RuleBasedParser, TransactionParser
+from app.services.transfers import Leg, find_transfer_counterpart, is_transfer_pair, split_pair
 from app.utils.dates import parse_user_datetime
 from app.utils.money import parse_amount
 from app.utils.validators import (
@@ -55,6 +56,7 @@ PLAIN_TEXT = F.text & ~F.text.startswith("/")
 BUTTON_STATES = (
     TxFlow.waiting_type,
     TxFlow.waiting_duplicate,
+    TxFlow.waiting_transfer,
     TxFlow.edit_menu,
     TxFlow.waiting_category,
     TxFlow.waiting_card,
@@ -112,6 +114,20 @@ async def advance(target: Message, state: FSMContext, session: AsyncSession, use
         await state.set_state(TxFlow.waiting_date)
         await target.answer(texts.ASK_DATE, reply_markup=kb.date_choice())
         return
+    if not data.get("transfer_declined"):
+        # Bu xabar avval saqlangan tranzaksiyaning ikkinchi tomoni bo‘lishi mumkin (o‘z kartalar orasidagi o‘tkazma).
+        counterpart = await find_transfer_counterpart(session, user.id, draft)
+        if counterpart is not None:
+            sent, received = split_pair(Leg.from_parsed(draft), Leg.from_transaction(counterpart))
+            await state.update_data(transfer_counterpart_id=counterpart.id)
+            await state.set_state(TxFlow.waiting_transfer)
+            await target.answer(
+                texts.TRANSFER_SUSPECTED_SAVED.format(
+                    route=render.transfer_route(sent, received), line=render.transaction_line(counterpart, user.tz)
+                ),
+                reply_markup=kb.transfer_choice("tx:tr"),
+            )
+            return
     if not data.get("duplicate_accepted"):
         duplicate = await ts.find_duplicate(session, user.id, draft)
         if duplicate is not None:
@@ -316,7 +332,18 @@ async def on_note(
     clock: Clock,
 ) -> None:
     text = (message.text or "").strip()
-    if message.forward_origin is not None or _looks_like_notification(text, user, clock()):
+    incoming = _as_notification(message, text, user, clock())
+    if incoming is not None:
+        # Oldingi tranzaksiya tugallanmay turib yana bir karta xabari keldi.
+        pending = Leg.from_parsed(await load_draft(state))
+        if is_transfer_pair(pending, Leg.from_parsed(incoming)):
+            sent, received = split_pair(pending, Leg.from_parsed(incoming))
+            await state.update_data(pair_prompt=True)
+            await message.answer(
+                texts.TRANSFER_SUSPECTED_PENDING.format(route=render.transfer_route(sent, received)),
+                reply_markup=kb.transfer_choice("tx:trp"),
+            )
+            return
         await message.answer(texts.FINISH_PENDING_FIRST, reply_markup=kb.draft_actions())
         return
     if len(text) > MAX_NOTE_LENGTH:
@@ -328,9 +355,57 @@ async def on_note(
     await ask_category(message, state, session, user, note_analyzer)
 
 
-def _looks_like_notification(text: str, user: User, now: datetime) -> bool:
-    parsed = _rules.parse(text, user.tz, now)
-    return parsed.amount is not None and parsed.source in ("cardxabar", "humo")
+def _as_notification(message: Message, text: str, user: User, now: datetime) -> ParsedTransaction | None:
+    """Matn izoh emas, yana bir karta xabari bo‘lsa, uni o‘qib qaytaradi."""
+    source_hint, forwarded_at = forward_info(message)
+    parsed = _rules.parse(text, user.tz, now, source_hint=source_hint)
+    is_card_message = parsed.amount is not None and parsed.source in ("cardxabar", "humo")
+    if message.forward_origin is None and not is_card_message:
+        return None
+    if parsed.occurred_at is None and forwarded_at is not None:
+        parsed.occurred_at = forwarded_at
+    return parsed
+
+
+# --------------------------------------------------------------------------- #
+# O‘z kartalar orasidagi o‘tkazma: hisobotga yozilmaydi
+# --------------------------------------------------------------------------- #
+
+
+async def on_own_transfer(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await remove_buttons(callback)
+    await callback_message(callback).answer(texts.OWN_TRANSFER_SKIPPED)
+
+
+async def on_pending_pair_choice(callback: CallbackQuery, state: FSMContext, callback_answer: CallbackAnswer) -> None:
+    data = await state.get_data()
+    if not data.get("pair_prompt"):
+        # Bu savol boshqa (eski) qoralamaga tegishli edi.
+        callback_answer.text = texts.STALE_BUTTON
+        callback_answer.show_alert = True
+        return
+    await remove_buttons(callback)
+    message = callback_message(callback)
+    if callback.data.endswith(":yes"):
+        await state.clear()
+        await message.answer(texts.TRANSFER_DROPPED)
+    else:
+        await state.update_data(pair_prompt=False)
+        await message.answer(texts.FINISH_PENDING_FIRST, reply_markup=kb.draft_actions())
+
+
+async def on_saved_pair_choice(callback: CallbackQuery, state: FSMContext, session: AsyncSession, user: User) -> None:
+    data = await state.get_data()
+    await remove_buttons(callback)
+    message = callback_message(callback)
+    if callback.data.endswith(":yes"):
+        await ts.delete_transaction(session, user.id, int(data["transfer_counterpart_id"]))
+        await state.clear()
+        await message.answer(texts.TRANSFER_DROPPED_WITH_SAVED)
+    else:
+        await state.update_data(transfer_declined=True)
+        await advance(message, state, session, user)
 
 
 # --------------------------------------------------------------------------- #
@@ -523,6 +598,9 @@ def create_router() -> Router:
     callback.register(on_date_button, F.data.startswith("tx:date:"), TxFlow.waiting_date)
     callback.register(on_duplicate_accepted, F.data == "tx:dup:save", TxFlow.waiting_duplicate)
     callback.register(on_edit, F.data == "tx:edit", TxFlow.waiting_note)
+    callback.register(on_own_transfer, F.data == "tx:own", TxFlow.waiting_note)
+    callback.register(on_pending_pair_choice, F.data.regexp(r"^tx:trp:(yes|no)$"), TxFlow.waiting_note)
+    callback.register(on_saved_pair_choice, F.data.regexp(r"^tx:tr:(yes|no)$"), TxFlow.waiting_transfer)
     callback.register(on_edit_choice, F.data.startswith("tx:ed:"), TxFlow.edit_menu)
     callback.register(on_new_category_request, F.data == "tx:cat:new", TxFlow.waiting_category)
     callback.register(on_category, F.data.regexp(r"^tx:cat:\d+$"), TxFlow.waiting_category)
