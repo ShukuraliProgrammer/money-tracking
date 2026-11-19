@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 START = (
-    "👋 Salom, {name}! Karta xabarini (CardXabar, HUMO, bank SMS) yoki screenshot’ini shu botga "
-    "forward qiling yoki matnini yuboring — men uni yozib boraman.\n"
-    "📊 Hisobot: /report · Yordam: /help\n"
+    "👋 Salom, {name}!\n\n"
+    "Karta xabarini (CardXabar, HUMO, bank SMS) yoki screenshot’ini shu botga forward qiling "
+    "yoki matnini yuboring — men uni yozib boraman.\n\n"
+    "📊 Hisobot: /report\n"
+    "❓ Yordam: /help\n\n"
     "🔒 PIN, CVV, SMS kod yoki to‘liq karta raqamini hech qachon yubormang."
 )
 

@@ -52,8 +52,11 @@ async def save_humo_expense(bot, note="Taksi — uyga qaytish", category="P2P", 
 
 async def test_start_greets_briefly_and_creates_profile(bot, session_factory):
     await bot.send("/start")
-    assert "forward qiling yoki matnini yuboring" in bot.last_text()
-    assert len(bot.last_text().splitlines()) <= 4
+    greeting, description, commands, warning = bot.last_text().split("\n\n")  # bo'limlar orasida bo'sh qator
+    assert greeting == "👋 Salom, Ali!"
+    assert "forward qiling yoki matnini yuboring" in description
+    assert commands.splitlines() == ["📊 Hisobot: /report", "❓ Yordam: /help"]
+    assert warning.startswith("🔒")
     user = await db_user(session_factory)
     assert user.timezone == "Asia/Tashkent"
     assert user.preferred_currency == "UZS"
