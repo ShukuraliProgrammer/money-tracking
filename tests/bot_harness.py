@@ -27,6 +27,7 @@ class RecordingSession(BaseSession):
     def __init__(self) -> None:
         super().__init__()
         self.requests: list[TelegramMethod[Any]] = []
+        self.file_bytes = b"\xff\xd8fake-jpeg-bytes"  # bot "yuklab oladigan" fayl mazmuni
         self._ids = itertools.count(1000)
 
     async def close(self) -> None:
@@ -48,7 +49,7 @@ class RecordingSession(BaseSession):
         return True
 
     async def stream_content(self, *args: Any, **kwargs: Any) -> AsyncGenerator[bytes, None]:
-        yield b"\xff\xd8fake-jpeg-bytes"
+        yield self.file_bytes
 
 
 class BotHarness:
@@ -118,6 +119,22 @@ class BotHarness:
             "chat": self._chat(),
             "from": self._from(),
             "photo": [{"file_id": "f", "file_unique_id": "u", "width": 10, "height": 10}],
+        }
+        return await self._feed({"message": message})
+
+    async def send_file(self, file_name: str, mime_type: str | None = None, data: bytes | None = None):
+        """Rasmni «fayl» sifatida yuborish (siqilmagan holda)."""
+        if data is not None:
+            self.session.file_bytes = data
+        document = {"file_id": "d", "file_unique_id": "ud", "file_name": file_name, "file_size": 5000}
+        if mime_type:
+            document["mime_type"] = mime_type
+        message = {
+            "message_id": next(self._message_ids),
+            "date": int(self.now.timestamp()),
+            "chat": self._chat(),
+            "from": self._from(),
+            "document": document,
         }
         return await self._feed({"message": message})
 

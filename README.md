@@ -154,7 +154,7 @@ Yangi format qo‘shish: namunani `tests/samples.py` ga, kutilgan natijani `test
 - Promptlar: `app/services/llm.py` (`PARSE_SYSTEM_PROMPT`, `NOTE_SYSTEM_PROMPT`).
 - Javob JSON sxema bo‘yicha so‘raladi; noto‘g‘ri JSON kelsa `LLM_MAX_ATTEMPTS` martagacha qayta so‘raladi, bo‘lmasa qoidalar natijasi ishlatiladi.
 - Anthropic uchun standart model `claude-opus-5-5`, `effort=low`. Arzonroq variant kerak bo‘lsa `ANTHROPIC_MODEL=claude-haiku-5-5` qiling. Opus/Sonnet/Fable modellarida rad etilgan so‘rov server tomonda zaxira modelga o‘tadi (`fallbacks="default"`).
-- **Screenshot** faqat LLM orqali o‘qiladi (`PARSE`/`SCREENSHOT_SYSTEM_PROMPT`): rasm provayderga yuboriladi, u tranzaksiyani va rasmdagi matnni qaytaradi, keyin natija matnli xabar bilan bir xil tekshiruvdan o‘tadi (karta raqami yashiriladi, SMS kodli rasm rad etiladi). `LLM_PROVIDER=none` bo‘lsa, bot rasm o‘rniga matn so‘raydi. Bitta rasmda bitta tranzaksiya o‘qiladi, hajmi 5 MB gacha.
+- **Screenshot** faqat LLM orqali o‘qiladi (`PARSE`/`SCREENSHOT_SYSTEM_PROMPT`): rasm provayderga yuboriladi, u tranzaksiyani va rasmdagi matnni qaytaradi, keyin natija matnli xabar bilan bir xil tekshiruvdan o‘tadi (karta raqami yashiriladi, SMS kodli rasm rad etiladi). `LLM_PROVIDER=none` bo‘lsa, bot rasm o‘rniga matn so‘raydi. Bitta rasmda bitta tranzaksiya o‘qiladi, hajmi 5 MB gacha. Rasm oddiy holda ham, fayl sifatida ham yuborilishi mumkin (JPEG, PNG, WebP, GIF; BMP va TIFF o‘zi o‘giriladi; HEIC faylini rasm sifatida yuborish kerak).
 - LLM’ga tranzaksiya matni, izoh va screenshot yuboriladi. Buni istamasangiz `LLM_PROVIDER=none` qoldiring: bot to‘liq ishlaydi, faqat erkin matnda ko‘proq savol beradi.
 
 ## Xavfsizlik

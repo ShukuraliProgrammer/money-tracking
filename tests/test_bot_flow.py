@@ -424,9 +424,26 @@ async def test_user_cannot_attach_another_users_card(bot, session_factory):
     assert await transactions(session_factory) == []
 
 
-async def test_photo_without_ai_key_asks_for_text_instead(bot):
+async def test_photo_without_ai_key_says_so_and_asks_for_text(bot):
     await bot.send_photo()
-    assert "matnini" in bot.last_text()
+    assert "AI kaliti sozlanmagan" in bot.last_text() and "matnini" in bot.last_text()
+
+
+async def test_image_sent_as_file_is_treated_like_a_photo(bot):
+    await bot.send_file("IMG_0012.png", "image/png")
+    assert "AI kaliti sozlanmagan" in bot.last_text()
+
+
+async def test_image_file_without_declared_type_is_recognized_by_its_name(bot):
+    await bot.send_file("IMG_0012.JPG")
+    assert "AI kaliti sozlanmagan" in bot.last_text()
+
+
+async def test_non_image_file_gets_a_reply_that_mentions_pictures(bot):
+    await bot.send_file("chek.pdf", "application/pdf")
+    reply = bot.last_text()
+    assert "faqat matnli" not in reply  # rasm ham qabul qilinadi, eski javob chalg'itardi
+    assert "rasm" in reply.lower() and "matn" in reply.lower()
 
 
 async def test_database_error_gets_friendly_message(bot, monkeypatch):
@@ -697,3 +714,25 @@ async def test_summary_shows_only_known_fields(bot):
     assert "Summa:" in summary and "Vaqt:" in summary
     assert "—" not in summary  # aniqlanmagan joy va karta uchun bo'sh qator chiqmaydi
     assert "Joy:" not in summary and "Karta:" not in summary
+
+
+async def test_image_file_in_another_format_is_converted_before_reading(session_factory):
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), (10, 120, 200)).save(buffer, format="BMP")
+    llm = VisionLLM()
+    bot = BotHarness(session_factory, NOW, llm=llm)
+    await bot.send_file("chek.bmp", "image/bmp", data=buffer.getvalue())
+    assert llm.images[0].media_type == "image/jpeg"
+    assert "Nima uchun qilindi?" in bot.last_text()
+
+
+async def test_unreadable_image_file_asks_to_send_it_as_a_photo(session_factory):
+    llm = VisionLLM()
+    bot = BotHarness(session_factory, NOW, llm=llm)
+    await bot.send_file("IMG_0012.HEIC", "image/heic", data=b"heic-bytes-pillow-cannot-read")
+    assert llm.images == []
+    assert "rasm sifatida" in bot.last_text()

@@ -44,6 +44,7 @@ from app.services.transfers import (
     split_pair,
 )
 from app.utils.dates import parse_user_datetime
+from app.utils.images import guess_image_type, to_supported_image
 from app.utils.money import parse_amount
 from app.utils.validators import (
     contains_full_card_number,
@@ -62,7 +63,17 @@ _rules = RuleBasedParser()
 logger = logging.getLogger(__name__)
 
 PLAIN_TEXT = F.text & ~F.text.startswith("/")
-IMAGE = F.photo | F.document.mime_type.startswith("image/")
+def image_type(message: Message) -> str | None:
+    """Xabar rasm bo‘lsa (photo yoki fayl sifatida yuborilgan rasm), uning turi."""
+    if message.photo:
+        return "image/jpeg"
+    if message.document:
+        return guess_image_type(message.document.mime_type, message.document.file_name)
+    return None
+
+
+IMAGE = F.func(lambda message: image_type(message) is not None)
+
 BUTTON_STATES = (
     TxFlow.waiting_type,
     TxFlow.waiting_duplicate,
@@ -225,17 +236,24 @@ async def on_image(
     if (file.file_size or 0) > MAX_IMAGE_BYTES:
         await message.answer(texts.PHOTO_TOO_LARGE)
         return
-    media_type = "image/jpeg" if message.photo else (message.document.mime_type or "image/jpeg")
 
     with suppress(TelegramAPIError):
         await bot.send_chat_action(message.chat.id, "typing")
     try:
         buffer = await bot.download(file)
+    except TelegramAPIError as error:
+        logger.warning("Screenshot not downloaded: %s", type(error).__name__)
+        await message.answer(texts.PHOTO_FAILED)
+        return
+    # Fayl sifatida yuborilgan BMP, TIFF kabi rasmlar JPEG’ga o‘giriladi.
+    prepared = to_supported_image(buffer.getvalue(), image_type(message))
+    if prepared is None:
+        await message.answer(texts.PHOTO_FORMAT)
+        return
+    try:
         categories = [category.name for category in await ts.list_categories(session, user.id)]
-        draft = await parser.parse_screenshot(
-            ImageInput(buffer.getvalue(), media_type), user.tz, clock(), categories=categories
-        )
-    except (LLMError, TelegramAPIError) as error:
+        draft = await parser.parse_screenshot(ImageInput(*prepared), user.tz, clock(), categories=categories)
+    except LLMError as error:
         logger.warning("Screenshot not read: %s", type(error).__name__)
         await message.answer(texts.PHOTO_FAILED)
         return
