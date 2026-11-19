@@ -32,7 +32,7 @@ _CATEGORY_KEYWORDS: tuple[tuple[str, str], ...] = (
     (r"qarz(?:ga)?\s+oldim|qarz\s+olish|взял\s+в\s+долг|занял", "Qarz olish"),
     (r"maosh|oylik\s+keldi|oylik\s+tushdi|avans|ish\s+haqi|зарплат|аванс|salary", "Maosh"),
     (r"investitsiya|aksiya|obligatsiya|depozit|omonat|инвест|акци|депозит|invest", "Investitsiya"),
-    (r"ijara|kvartira|kommunal|svet|gaz\b|elektr|uy\s+uchun|uyga|internet|аренд|коммунал|rent", "Uyga to‘lov"),
+    (r"ijara|kvartira|kommunal|svet|gaz\b|elektr|uy\s+uchun|uyga\s+to'lov|internet|аренд|коммунал|rent", "Uyga to‘lov"),
     (
         r"ovqat|tushlik|nonushta|kechki|kafe|restoran|choyxona|osh\b|burger|pizza|lavash|kofe"
         r"|обед|ужин|завтрак|кафе|ресторан|lunch|dinner|food",

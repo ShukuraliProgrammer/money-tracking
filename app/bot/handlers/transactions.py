@@ -34,10 +34,15 @@ from app.bot.states import TxFlow
 from app.models import User
 from app.schemas import NoteAnalysis, ParsedTransaction
 from app.services import transaction_service as ts
-from app.services.notes import NoteAnalyzer
 from app.services.llm import ImageInput, LLMError
+from app.services.notes import NoteAnalyzer
 from app.services.parser import RuleBasedParser, TransactionParser
-from app.services.transfers import Leg, find_transfer_counterpart, is_transfer_pair, split_pair
+from app.services.transfers import (
+    Leg,
+    find_transfer_counterpart,
+    is_transfer_pair,
+    split_pair,
+)
 from app.utils.dates import parse_user_datetime
 from app.utils.money import parse_amount
 from app.utils.validators import (
@@ -482,8 +487,9 @@ async def ask_category(
 
     await state.update_data(analysis=analysis.model_dump(mode="json"))
     await state.set_state(TxFlow.waiting_category)
-    text = texts.ASK_CATEGORY + (f"\n{texts.SUGGESTED_HINT}" if suggestion else "")
-    await target.answer(text, reply_markup=kb.category_choice(categories, suggestion.id if suggestion else None))
+    await target.answer(
+        texts.ASK_CATEGORY, reply_markup=kb.category_choice(categories, suggestion.id if suggestion else None)
+    )
 
 
 async def on_category(
@@ -524,13 +530,15 @@ async def on_new_category_name(message: Message, state: FSMContext, session: Asy
 async def ask_card(target: Message, state: FSMContext, session: AsyncSession, user: User) -> None:
     draft = await load_draft(state)
     cards = await ts.list_cards(session, user.id, only_active=True)
-    matching = next((card.id for card in cards if draft.card_last4 and card.card_last4 == draft.card_last4), None)
+    matching = next((card for card in cards if draft.card_last4 and card.card_last4 == draft.card_last4), None)
+    if matching is not None:
+        # Xabardagi karta ro‘yxatda bor: so‘rab o‘tirmasdan shu karta bilan saqlanadi.
+        await save(target, state, session, user, matching.id)
+        return
 
     text = texts.ASK_CARD_INCOME if draft.transaction_type == "income" else texts.ASK_CARD_EXPENSE
-    if not cards:
-        text += f"\n{texts.NO_CARDS_HINT}"
     await state.set_state(TxFlow.waiting_card)
-    await target.answer(text, reply_markup=kb.card_choice(cards, matching))
+    await target.answer(text, reply_markup=kb.card_choice(cards))
 
 
 async def save(
@@ -547,7 +555,7 @@ async def save(
         await target.answer(f"⚠️ {error}")
         return False
     await state.clear()
-    await target.answer(render.saved_summary(transaction, user.tz))
+    await target.answer(render.saved_summary(transaction))
     return True
 
 

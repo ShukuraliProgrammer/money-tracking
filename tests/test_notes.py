@@ -84,3 +84,12 @@ async def test_analyzer_falls_back_to_heuristics_when_llm_fails():
     result = await NoteAnalyzer(llm).analyze("Kamolonda ovqatlandik 3 kishi", None, "expense", CATEGORIES)
     assert llm.calls == 1
     assert result.people_count == 3
+
+
+def test_going_home_is_not_a_home_payment():
+    assert heuristic_analysis("Taksi — uyga qaytish", "YANDEX GO", CATEGORIES).category_guess is None
+
+
+def test_paying_for_home_is_a_home_payment():
+    assert heuristic_analysis("Uyga to'lov, noyabr", None, CATEGORIES).category_guess == "Uyga to‘lov"
+    assert heuristic_analysis("uy uchun svet", None, CATEGORIES).category_guess == "Uyga to‘lov"

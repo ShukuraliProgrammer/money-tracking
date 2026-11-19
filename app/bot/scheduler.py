@@ -45,7 +45,6 @@ class DueReport:
     key: str  # davr belgisi: kun ("2026-11-19"), hafta dushanbasi ("2026-11-09") yoki oy ("2026-10")
     period_code: str
     heading: str
-    intro: str
 
 
 def due_reports(user: User, now: datetime) -> list[DueReport]:
@@ -57,20 +56,18 @@ def due_reports(user: User, now: datetime) -> list[DueReport]:
     if user.weekly_report_enabled:
         last_monday = (local - timedelta(days=local.weekday() + 7)).date().isoformat()
         if user.last_weekly_report != last_monday and not (local.weekday() == 0 and too_early):
-            due.append(
-                DueReport("weekly", last_monday, f"wk{last_monday}", texts.WEEKLY_HEADING, texts.WEEKLY_REPORT_INTRO)
-            )
+            due.append(DueReport("weekly", last_monday, f"wk{last_monday}", texts.WEEKLY_HEADING))
 
     if user.notifications_enabled:
         year, month = previous_month(local.year, local.month)
         month_key = f"{year:04d}-{month:02d}"
         if user.last_report_month != month_key and not (local.day == 1 and too_early):
-            due.append(DueReport("monthly", month_key, month_key, texts.MONTHLY_HEADING, texts.MONTHLY_REPORT_INTRO))
+            due.append(DueReport("monthly", month_key, month_key, texts.MONTHLY_HEADING))
 
     if user.daily_report_enabled and local.hour >= DAILY_HOUR:
         today = local.date().isoformat()
         if user.last_daily_report != today:
-            due.append(DueReport("daily", today, f"day{today}", texts.DAILY_HEADING, ""))
+            due.append(DueReport("daily", today, f"day{today}", texts.DAILY_HEADING))
     return due
 
 
@@ -82,7 +79,7 @@ async def _deliver_daily(
     await bot.send_message(
         user.telegram_user_id,
         render.daily_report_text(period.label, report, transactions, user.tz),
-        reply_markup=kb.report_summary_actions(due.period_code, 0, 0, report.count),
+        reply_markup=kb.report_summary_actions(kb.ReportKey(due.period_code, period.label), report.count),
     )
 
 
@@ -102,11 +99,10 @@ async def _deliver(bot: Bot, user: User, due: DueReport, period: Period, report:
             caption=texts.REPORT_PHOTO_CAPTION.format(heading=due.heading, period=period.label),
             disable_notification=True,
         )
-    filter_line = f"💳 {texts.ALL_CARDS} · 🏷 {texts.ALL_CATEGORIES}"
     await bot.send_message(
         user.telegram_user_id,
-        render.clip(due.intro + render.report_text(period.label, filter_line, report, user.tz)),
-        reply_markup=kb.report_summary_actions(due.period_code, 0, 0, report.count),
+        render.report_text(period.label, "", report, user.tz),
+        reply_markup=kb.report_summary_actions(kb.ReportKey(due.period_code, period.label), report.count),
     )
 
 

@@ -161,7 +161,8 @@ async def test_previous_week_report_is_sent_on_monday_morning(harness, session_f
     (photo,) = photos(harness)
     (message,) = messages(harness)
     assert "Haftalik hisobot" in photo.caption and "09.11 – 15.11.2026" in photo.caption
-    assert "09.11 – 15.11.2026" in message.text
+    assert message.text.startswith("📊 <b>09.11 – 15.11.2026</b>")  # kirish so'zisiz, darhol hisobot
+    assert "Hamma kartalar" not in message.text
     assert "Chiqim: <b>250 000 UZS</b>" in message.text
     assert (await stored_user(session_factory)).last_weekly_report == "2026-11-09"
 

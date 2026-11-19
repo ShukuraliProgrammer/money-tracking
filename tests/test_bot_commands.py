@@ -29,7 +29,8 @@ async def record(bot, text, note, category, card):
     await bot.send(text)
     await bot.send(note)
     await bot.click(category)
-    await bot.click(card)
+    if "Saqlandi" not in bot.last_text():  # karta xabardan aniqlangan bo'lsa, so'ralmaydi
+        await bot.click(card)
     assert "Saqlandi" in bot.last_text()
 
 
@@ -58,7 +59,7 @@ async def seeded(bot):
 
 async def test_cards_empty_state(bot):
     await bot.send("/cards")
-    assert "Hali karta qo‘shilmagan" in bot.last_text()
+    assert bot.last_text() == "💳 Hali karta qo‘shilmagan."
     assert any("Karta qo‘shish" in b for b in bot.buttons())
 
 
@@ -121,10 +122,11 @@ async def test_card_delete_needs_confirmation(bot, session_factory):
 # --- Turlar ----------------------------------------------------------------------- #
 
 
-async def test_categories_lists_defaults(bot):
+async def test_categories_lists_defaults_without_extra_hints(bot):
     await bot.send("/categories")
     for name in ("P2P", "Ovqatlanish", "Narsa sotib olish", "Qarz berish", "Qarz olish", "Investitsiya", "Uyga to‘lov"):
         assert name in bot.last_text()
+    assert len(bot.last_text().splitlines()) == 10  # sarlavha + 9 ta tur
 
 
 async def test_category_can_be_added_and_deleted(bot, session_factory):
@@ -147,24 +149,34 @@ async def test_duplicate_category_gets_friendly_error(bot):
 # --- Hisobot ----------------------------------------------------------------------- #
 
 
-async def test_report_asks_period_then_card_then_category(seeded):
+async def test_report_opens_this_month_for_all_cards_at_once(seeded):
     await seeded.send("/report")
-    assert {"Bugun", "Bu hafta"} <= {b for b in seeded.buttons()}
-    assert any("Bu oy" in b for b in seeded.buttons())
-    assert any("Oktabr 2026" in b for b in seeded.buttons())
-    await seeded.click("Bu oy")
-    assert any("Hamma kartalar" in b for b in seeded.buttons())
-    assert any("Asosiy Humo" in b for b in seeded.buttons())
+    report = seeded.last_text()
+    assert "Noyabr 2026" in report
+    assert "Kirim: <b>1 000 000 UZS</b>" in report
+    labels = seeded.buttons()
+    assert any("Noyabr 2026" in b for b in labels)
+    assert any("Hamma kartalar" in b for b in labels) and any("Hamma turlar" in b for b in labels)
+    assert "Hamma kartalar" not in report  # filtr tugmada ko'rinadi, matnda takrorlanmaydi
+
+
+async def test_report_filters_are_one_tap_away(seeded):
+    await seeded.send("/report")
+    await seeded.click("Noyabr 2026")
+    assert {"Bugun", "Bu hafta"} <= set(seeded.buttons())
+    assert any("O‘tgan oy" in b and "Oktabr 2026" in b for b in seeded.buttons())
+    await seeded.click("Orqaga")
     await seeded.click("Hamma kartalar")
-    assert any("Hamma turlar" in b for b in seeded.buttons())
+    assert any("Asosiy Humo" in b for b in seeded.buttons()) and any("Uzcard ish" in b for b in seeded.buttons())
+    await seeded.click("Orqaga")
+    await seeded.click("Hamma turlar")
     assert any("Ovqatlanish" in b for b in seeded.buttons())
+    await seeded.click("Orqaga")
+    assert "Noyabr 2026" in seeded.last_text() and "Chiqim: <b>304 000 UZS</b>" in seeded.last_text()
 
 
 async def test_monthly_report_covers_all_cards(seeded):
     await seeded.send("/report")
-    await seeded.click("Bu oy")
-    await seeded.click("Hamma kartalar")
-    await seeded.click("Hamma turlar")
     report = seeded.last_text()
     assert "Noyabr 2026" in report
     assert "Kirim: <b>1 000 000 UZS</b>" in report
@@ -178,40 +190,49 @@ async def test_monthly_report_covers_all_cards(seeded):
 
 async def test_report_filtered_by_card(seeded):
     await seeded.send("/report")
-    await seeded.click("Bu oy")
+    await seeded.click("Hamma kartalar")
     await seeded.click("Uzcard ish")
-    await seeded.click("Hamma turlar")
     report = seeded.last_text()
     assert "Chiqim: <b>250 000 UZS</b>" in report
     assert "Kirim: <b>0 UZS</b>" in report
-    assert "Uzcard ish ****5678" in report
+    assert "💳 Uzcard ish ****5678" in report  # faol filtr matnda ham ko'rinadi
     assert "YANDEX GO" not in report
+    assert any("Uzcard ish" in b for b in seeded.buttons())
 
 
 async def test_report_filtered_by_category(seeded):
     await seeded.send("/report")
-    await seeded.click("Bu oy")
-    await seeded.click("Hamma kartalar")
+    await seeded.click("Hamma turlar")
     await seeded.click("Ovqatlanish")
     report = seeded.last_text()
     assert "Chiqim: <b>250 000 UZS</b>" in report
     assert "YANDEX GO" not in report
 
 
+async def test_report_filters_combine_and_survive_a_period_change(seeded):
+    await seeded.send("/report")
+    await seeded.click("Hamma kartalar")
+    await seeded.click("Uzcard ish")
+    await seeded.click("Hamma turlar")
+    await seeded.click("Narsa sotib olish")
+    assert "tranzaksiya yo‘q" in seeded.last_text()  # noyabrda bu kartadan xarid yo'q
+    await seeded.click("Noyabr 2026")
+    await seeded.click("O‘tgan oy")
+    report = seeded.last_text()
+    assert "Oktabr 2026" in report and "Chiqim: <b>700 000 UZS</b>" in report
+    assert "Uzcard ish ****5678" in report and "Narsa sotib olish" in report
+
+
 async def test_previous_month_report(seeded):
     await seeded.send("/report")
+    await seeded.click("Noyabr 2026")
     await seeded.click("O‘tgan oy")
-    await seeded.click("Hamma kartalar")
-    await seeded.click("Hamma turlar")
     assert "Oktabr 2026" in seeded.last_text()
     assert "Chiqim: <b>700 000 UZS</b>" in seeded.last_text()
 
 
 async def test_transaction_list_shows_every_label(seeded):
     await seeded.send("/report")
-    await seeded.click("Bu oy")
-    await seeded.click("Hamma kartalar")
-    await seeded.click("Hamma turlar")
     await seeded.click("Tranzaksiyalar")
     listing = seeded.last_text()
     for label in ("Taksi — uyga qaytish", "Maosh keldi", "Kamolonda ovqatlandik 3 kishi"):
@@ -225,9 +246,6 @@ async def test_transaction_list_is_paginated(bot):
         text = samples.HUMO_EXPENSE.replace("12:01", f"12:{minute:02d}")
         await record(bot, text, f"izoh-{minute:02d}", "P2P", "Kartasiz")
     await bot.send("/report")
-    await bot.click("Bu oy")
-    await bot.click("Hamma kartalar")
-    await bot.click("Hamma turlar")
     await bot.click("Tranzaksiyalar")
     assert "1/2" in bot.last_text()
     assert "izoh-11" in bot.last_text() and "izoh-01" not in bot.last_text()
@@ -238,9 +256,8 @@ async def test_transaction_list_is_paginated(bot):
 
 async def test_report_csv_respects_filters(seeded):
     await seeded.send("/report")
-    await seeded.click("Bu oy")
+    await seeded.click("Hamma kartalar")
     await seeded.click("Uzcard ish")
-    await seeded.click("Hamma turlar")
     await seeded.click("CSV")
     (document,) = seeded.documents()
     content = document.document.data.decode("utf-8-sig")
@@ -251,20 +268,16 @@ async def test_report_csv_respects_filters(seeded):
 
 async def test_empty_report(bot):
     await bot.send("/report")
-    await bot.click("Bugun")
-    await bot.click("Hamma kartalar")
-    await bot.click("Hamma turlar")
     assert "tranzaksiya yo‘q" in bot.last_text()
+    assert not any("Tranzaksiyalar" in b for b in bot.buttons())
 
 
 async def test_report_never_shows_other_users_data(seeded):
     stranger = seeded.as_user(2002)
     await stranger.send("/report")
-    await stranger.click("Bu oy")
-    assert not any("Asosiy Humo" in b for b in stranger.buttons())
-    await stranger.click("Hamma kartalar")
-    await stranger.click("Hamma turlar")
     assert "tranzaksiya yo‘q" in stranger.last_text()
+    await stranger.click("Hamma kartalar")
+    assert not any("Asosiy Humo" in b for b in stranger.buttons())
 
 
 async def test_report_with_foreign_card_id_shows_nothing(seeded, session_factory):
@@ -307,10 +320,14 @@ async def test_export_with_no_data(bot):
 # --- Sozlamalar ------------------------------------------------------------------------ #
 
 
-async def test_settings_shows_current_values(bot):
+async def test_settings_are_compact(bot):
     await bot.send("/settings")
     text = bot.last_text()
-    assert "Asia/Tashkent" in text and "UZS" in text and "O‘zbek" in text
+    assert "Asia/Tashkent" in text and "UZS" in text
+    assert "Til:" not in text  # bitta til bor, uni ko'rsatish shart emas
+    assert len(text.splitlines()) <= 4
+    labels = " | ".join(bot.buttons())
+    assert "Kunlik ✅" in labels and "Haftalik ✅" in labels and "Oylik ✅" in labels
 
 
 async def test_settings_change_currency_timezone_and_notifications(bot, session_factory):
@@ -319,7 +336,8 @@ async def test_settings_change_currency_timezone_and_notifications(bot, session_
     await bot.click("USD")
     await bot.click("Vaqt zonasi")
     await bot.send("Asia/Samarkand")
-    await bot.click("Oylik hisobot")
+    await bot.click("Oylik")
+    assert any("Oylik ❌" in b for b in bot.buttons())
     async with session_factory() as session:
         user = await session.scalar(select(User))
     assert (user.preferred_currency, user.timezone, user.notifications_enabled) == ("USD", "Asia/Samarkand", False)
@@ -367,9 +385,8 @@ async def test_report_picture_can_be_requested_on_demand(seeded):
     from aiogram.methods import SendPhoto
 
     await seeded.send("/report")
-    await seeded.click("Bu oy")
+    await seeded.click("Hamma kartalar")
     await seeded.click("Uzcard ish")
-    await seeded.click("Hamma turlar")
     await seeded.click("Rasm")
     (photo,) = [r for r in seeded.session.requests if isinstance(r, SendPhoto)]
     assert photo.photo.data.startswith(b"\x89PNG")
@@ -378,27 +395,22 @@ async def test_report_picture_can_be_requested_on_demand(seeded):
 
 async def test_empty_report_offers_no_picture(bot):
     await bot.send("/report")
-    await bot.click("Bugun")
-    await bot.click("Hamma kartalar")
-    await bot.click("Hamma turlar")
     assert not any("Rasm" in b for b in bot.buttons())
 
 
-async def test_settings_show_and_toggle_weekly_report(bot, session_factory):
+async def test_settings_toggle_weekly_report(bot, session_factory):
     await bot.send("/settings")
-    assert "Haftalik hisobot: yoqilgan" in bot.last_text()
-    await bot.click("Haftalik hisobot")
-    assert "Haftalik hisobot: o‘chirilgan" in bot.last_text()
+    await bot.click("Haftalik")
+    assert any("Haftalik ❌" in b for b in bot.buttons())
     async with session_factory() as session:
         user = await session.scalar(select(User))
     assert (user.weekly_report_enabled, user.notifications_enabled) == (False, True)
 
 
-async def test_settings_show_and_toggle_daily_report(bot, session_factory):
+async def test_settings_toggle_daily_report(bot, session_factory):
     await bot.send("/settings")
-    assert "Kunlik hisobot: yoqilgan" in bot.last_text()
-    await bot.click("Kunlik hisobot")
-    assert "Kunlik hisobot: o‘chirilgan" in bot.last_text()
+    await bot.click("Kunlik")
+    assert any("Kunlik ❌" in b for b in bot.buttons())
     async with session_factory() as session:
         user = await session.scalar(select(User))
     assert (user.daily_report_enabled, user.weekly_report_enabled, user.notifications_enabled) == (False, True, True)

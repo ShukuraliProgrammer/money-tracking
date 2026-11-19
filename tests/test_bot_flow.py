@@ -43,15 +43,17 @@ async def save_humo_expense(bot, note="Taksi — uyga qaytish", category="P2P", 
     await bot.send(text)
     await bot.send(note)
     await bot.click(category)
-    await bot.click(card)
+    if "Saqlandi" not in bot.last_text():  # karta xabardan aniqlangan bo'lsa, so'ralmaydi
+        await bot.click(card)
 
 
 # --- /start ---------------------------------------------------------------- #
 
 
-async def test_start_greets_and_creates_profile(bot, session_factory):
+async def test_start_greets_briefly_and_creates_profile(bot, session_factory):
     await bot.send("/start")
     assert "forward qiling yoki matnini yuboring" in bot.last_text()
+    assert len(bot.last_text().splitlines()) <= 4
     user = await db_user(session_factory)
     assert user.timezone == "Asia/Tashkent"
     assert user.preferred_currency == "UZS"
@@ -93,17 +95,36 @@ async def test_after_note_bot_asks_type_with_users_categories(bot):
     assert "Yangi tur" in labels
 
 
-async def test_after_type_bot_asks_card_and_marks_matching_one(bot, session_factory):
+async def test_card_question_is_skipped_when_message_names_a_known_card(bot, session_factory):
     await add_card(session_factory, last4="1234", name="Asosiy Humo")
     await add_card(session_factory, last4="5678", name="Uzcard ish", network="Uzcard")
     await bot.send(samples.HUMO_EXPENSE)
     await bot.send("Taksi — uyga qaytish")
     await bot.click("P2P")
-    assert "Qaysi kartadan" in bot.last_text()
-    matching = next(b for b in bot.buttons() if "1234" in b)
-    other = next(b for b in bot.buttons() if "5678" in b)
-    assert "✓" in matching and "✓" not in other
+    assert "Saqlandi" in bot.last_text()
+    assert "Qaysi kartadan" not in bot.all_text()
+    (tx,) = await transactions(session_factory)
+    assert tx.card.name == "Asosiy Humo"
+
+
+async def test_card_is_asked_when_message_card_is_unknown(bot, session_factory):
+    await add_card(session_factory, last4="5678", name="Uzcard ish", network="Uzcard")
+    await bot.send(samples.HUMO_EXPENSE)
+    await bot.send("Taksi")
+    await bot.click("P2P")
+    assert bot.last_text() == "Qaysi kartadan qilindi?"
+    assert any("Uzcard ish ****5678" in b for b in bot.buttons())
     assert any("Yangi karta" in b for b in bot.buttons())
+
+
+async def test_inactive_card_is_not_chosen_automatically(bot, session_factory):
+    card = await add_card(session_factory, last4="1234", name="Asosiy Humo")
+    async with session_factory() as session:
+        await ts.toggle_card_active(session, card.user_id, card.id)
+    await bot.send(samples.HUMO_EXPENSE)
+    await bot.send("Taksi")
+    await bot.click("P2P")
+    assert "Qaysi kartadan" in bot.last_text()
 
 
 async def test_full_flow_saves_transaction_with_label_type_and_card(bot, session_factory):
@@ -111,14 +132,15 @@ async def test_full_flow_saves_transaction_with_label_type_and_card(bot, session
     await bot.send(samples.HUMO_EXPENSE)
     await bot.send("Taksi — uyga qaytish")
     await bot.click("P2P")
-    await bot.click("1234")
 
     reply = bot.last_text()
     assert "Saqlandi" in reply
     assert "54 000 UZS" in reply and "YANDEX GO" in reply
     assert "P2P" in reply
-    assert "Taksi — uyga qaytish" in reply
     assert "Asosiy Humo ****1234" in reply
+    # Qisqa tasdiq: foydalanuvchi hozirgina yozgan izoh va sana takrorlanmaydi.
+    assert "Taksi — uyga qaytish" not in reply and "19.11.2026" not in reply
+    assert len(reply.splitlines()) == 2
 
     (tx,) = await transactions(session_factory)
     assert tx.amount == Decimal("54000")
@@ -139,15 +161,17 @@ async def test_income_message_uses_income_wording(bot):
     assert "Qaysi kartaga" in bot.last_text()
 
 
-async def test_note_details_are_extracted_and_shown(bot, session_factory):
+async def test_note_details_are_stored_but_not_repeated_in_the_reply(bot, session_factory):
     await bot.send(samples.CARDXABAR_EXPENSE)
-    await bot.send("Kamolonda ovqatlandik 3 kishi")
+    await bot.send("Kamolonda ovqatlandik 3 kishi #tushlik")
     await bot.click("Ovqatlanish")
     await bot.click("Kartasiz")
-    assert "Kishi soni: 3" in bot.last_text()
+    assert "Kishi soni" not in bot.last_text() and "#tushlik" not in bot.last_text()
+    assert "Kartasiz" in bot.last_text()
     (tx,) = await transactions(session_factory)
     assert tx.people_count == 3
     assert tx.is_shared_expense is True
+    assert tx.tags == ["tushlik"]
     assert tx.card is None
 
 
@@ -358,6 +382,7 @@ async def test_note_keywords_suggest_category(bot):
     await bot.send("Do'stimga qarz berdim")
     starred = [b for b in bot.buttons() if "⭐" in b]
     assert len(starred) == 1 and "Qarz berish" in starred[0]
+    assert bot.last_text() == "Qaysi turga kiradi?"  # ⭐ belgisi uchun alohida izoh yo'q
 
 
 # --- Xavfsizlik ---------------------------------------------------------------- #
@@ -661,3 +686,14 @@ async def test_photo_while_another_transaction_is_pending_is_not_processed(sessi
     await bot.send_photo()
     assert llm.images == []
     assert "Avval" in bot.last_text()
+
+
+# --- Sodda xabarlar ------------------------------------------------------------------- #
+
+
+async def test_summary_shows_only_known_fields(bot):
+    await bot.send("Kamolonda xarid 250 ming 19.11.2026 10:15")
+    summary = bot.last_text()
+    assert "Summa:" in summary and "Vaqt:" in summary
+    assert "—" not in summary  # aniqlanmagan joy va karta uchun bo'sh qator chiqmaydi
+    assert "Joy:" not in summary and "Karta:" not in summary

@@ -26,7 +26,7 @@ def test_draft_summary_makes_amount_bold():
 
 
 def test_saved_summary_makes_amount_bold():
-    assert "💸 <b>250 000 UZS</b> — KAMOLON" in render.saved_summary(make_tx(), TZ)
+    assert "💸 <b>250 000 UZS</b> — KAMOLON" in render.saved_summary(make_tx())
 
 
 def test_transaction_line_makes_amount_bold():
@@ -42,12 +42,27 @@ def test_report_totals_are_bold():
 
 
 def test_report_breakdowns_and_top_lists_have_bold_amounts():
-    report = summarize([make_tx(1), make_tx(2, kind="income", amount="1000000", merchant="ISH")])
-    text = render.report_text("Noyabr 2026", "filtr", report, TZ)
+    other = make_tx(3, amount="40000", merchant="KORZINKA")
+    other.card = Card(id=2, user_id=1, name="Uzcard ish", card_last4="5678", card_network="Uzcard")
+    other.category = Category(id=2, user_id=1, name="Boshqa", emoji="📦")
+    report = summarize([make_tx(1), make_tx(2, kind="income", amount="1000000", merchant="ISH"), other])
+    text = render.report_text("Noyabr 2026", "", report, TZ)
     assert "• Asosiy Humo ****1234: <b>+1 000 000 / −250 000</b>" in text
     assert "• 🍽 Ovqatlanish: <b>+1 000 000 / −250 000</b> (2 ta)" in text
     assert "1. <b>250 000 UZS</b> — KAMOLON (19.11)" in text
     assert "• KAMOLON — 1 marta, <b>250 000 UZS</b>" in text
+
+
+def test_breakdown_with_a_single_row_is_left_out():
+    # Bitta karta va bitta tur bo'lsa, taqsimot yig'indini takrorlaydi xolos.
+    text = render.report_text("Noyabr 2026", "", summarize([make_tx(1), make_tx(2, amount="1000")]), TZ)
+    assert "Kartalar bo‘yicha" not in text and "Turlar bo‘yicha" not in text
+    assert "💸 Chiqim: <b>251 000 UZS</b>" in text
+
+
+def test_report_without_filter_has_no_filter_line():
+    text = render.report_text("Noyabr 2026", "", summarize([make_tx(1)]), TZ)
+    assert text.splitlines()[:2] == ["📊 <b>Noyabr 2026</b>", ""]
 
 
 def test_labels_and_merchants_stay_regular_weight():

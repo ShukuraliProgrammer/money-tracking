@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -89,11 +91,8 @@ def category_choice(categories: list[Category], suggested_id: int | None) -> Inl
     return builder.as_markup()
 
 
-def card_choice(cards: list[Card], matching_id: int | None) -> InlineKeyboardMarkup:
-    rows = []
-    for card in cards:
-        mark = "✓ " if card.id == matching_id else ""
-        rows.append([_button(f"💳 {mark}{card.name} ****{card.card_last4}", f"tx:card:{card.id}")])
+def card_choice(cards: list[Card]) -> InlineKeyboardMarkup:
+    rows = [[_button(f"💳 {card.name} ****{card.card_last4}", f"tx:card:{card.id}")] for card in cards]
     rows.append([_button(texts.BTN_NEW_CARD, "tx:card:new"), _button(texts.BTN_NO_CARD, "tx:card:none")])
     rows.append(_cancel_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -165,57 +164,97 @@ def categories_menu(categories: list[Category]) -> InlineKeyboardMarkup:
 # --- Hisobot ----------------------------------------------------------------------- #
 
 
-def report_periods(months: list[tuple[int, int]]) -> InlineKeyboardMarkup:
-    """``months`` — joriy oydan boshlab, eng yangisi birinchi."""
+@dataclass(frozen=True)
+class ReportKey:
+    """Hisobotning joriy ko‘rinishi: davr va filtrlar (tugmalarda ham shu ko‘rinadi)."""
+
+    period: str
+    period_label: str
+    card_id: int = 0
+    card_label: str = texts.ALL_CARDS
+    category_id: int = 0
+    category_label: str = f"🏷 {texts.ALL_CATEGORIES}"
+
+    @property
+    def data(self) -> str:
+        return f"{self.period}:{self.card_id}:{self.category_id}"
+
+
+def _short(text: str, limit: int = 24) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _back(key: ReportKey) -> list[InlineKeyboardButton]:
+    return [_button(texts.BTN_BACK, f"rpv:{key.data}:0")]
+
+
+def report_summary_actions(key: ReportKey, count: int) -> InlineKeyboardMarkup:
+    """Hisobot ostidagi tugmalar: ro‘yxat, rasm, CSV va uchta filtr (joriy qiymati bilan)."""
+    rows = []
+    if count:
+        rows.append([_button(texts.BTN_TRANSACTIONS.format(count=count), f"rpv:{key.data}:1")])
+        rows.append([_button(texts.BTN_PICTURE, f"rpi:{key.data}"), _button(texts.BTN_CSV, f"rpx:{key.data}")])
+    rows.append([_button(f"📅 {key.period_label}", f"rpp:{key.data}")])
+    rows.append(
+        [
+            _button(_short(f"💳 {key.card_label}"), f"rpc:{key.data}"),
+            _button(_short(key.category_label), f"rpg:{key.data}"),
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def report_periods(key: ReportKey, months: list[tuple[int, int]]) -> InlineKeyboardMarkup:
+    """``months`` — joriy oydan boshlab, eng yangisi birinchi. Karta va tur filtri saqlanadi."""
+
+    def pick(label: str, code: str) -> InlineKeyboardButton:
+        return _button(label, f"rpv:{code}:{key.card_id}:{key.category_id}:0")
+
     builder = InlineKeyboardBuilder()
-    builder.row(_button(texts.BTN_TODAY, "rpp:d"), _button(texts.BTN_WEEK, "rpp:w"))
-    builder.row(_button(texts.BTN_THIS_MONTH.format(label=month_label(*months[0])), "rpp:m"))
+    builder.row(pick(texts.BTN_TODAY, "d"), pick(texts.BTN_WEEK, "w"))
+    builder.row(pick(texts.BTN_THIS_MONTH.format(label=month_label(*months[0])), "m"))
     if len(months) > 1:
-        builder.row(_button(texts.BTN_PREV_MONTH.format(label=month_label(*months[1])), "rpp:pm"))
-    older = [_button(month_label(year, month), f"rpp:{year:04d}-{month:02d}") for year, month in months[2:8]]
+        builder.row(pick(texts.BTN_PREV_MONTH.format(label=month_label(*months[1])), "pm"))
+    older = [pick(month_label(year, month), f"{year:04d}-{month:02d}") for year, month in months[2:8]]
     for index in range(0, len(older), 2):
         builder.row(*older[index : index + 2])
-    builder.row(_button(texts.BTN_ALL_TIME, "rpp:all"))
+    builder.row(pick(texts.BTN_ALL_TIME, "all"))
+    builder.row(*_back(key))
     return builder.as_markup()
 
 
-def report_cards(period: str, cards: list[Card]) -> InlineKeyboardMarkup:
-    rows = [[_button(f"💳 {texts.ALL_CARDS}", f"rpc:{period}:0")]]
-    rows += [[_button(f"{card.name} ****{card.card_last4}", f"rpc:{period}:{card.id}")] for card in cards]
-    rows.append([_button(texts.BTN_PERIOD, "rp:start")])
+def report_cards(key: ReportKey, cards: list[Card]) -> InlineKeyboardMarkup:
+    def pick(label: str, card_id: int) -> list[InlineKeyboardButton]:
+        return [_button(label, f"rpv:{key.period}:{card_id}:{key.category_id}:0")]
+
+    rows = [pick(f"💳 {texts.ALL_CARDS}", 0)]
+    rows += [pick(f"{card.name} ****{card.card_last4}", card.id) for card in cards]
+    rows.append(_back(key))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def report_categories(period: str, card_id: int, categories: list[Category]) -> InlineKeyboardMarkup:
+def report_categories(key: ReportKey, categories: list[Category]) -> InlineKeyboardMarkup:
+    def pick(label: str, category_id: int) -> InlineKeyboardButton:
+        return _button(label, f"rpv:{key.period}:{key.card_id}:{category_id}:0")
+
     builder = InlineKeyboardBuilder()
     for category in categories:
-        builder.add(_button(f"{category.emoji} {category.name}", f"rpv:{period}:{card_id}:{category.id}:0"))
+        builder.add(pick(f"{category.emoji} {category.name}", category.id))
     builder.adjust(2)
     markup = builder.as_markup()
-    markup.inline_keyboard.insert(0, [_button(f"🏷 {texts.ALL_CATEGORIES}", f"rpv:{period}:{card_id}:0:0")])
-    markup.inline_keyboard.append([_button(texts.BTN_BACK, f"rpp:{period}")])
+    markup.inline_keyboard.insert(0, [pick(f"🏷 {texts.ALL_CATEGORIES}", 0)])
+    markup.inline_keyboard.append(_back(key))
     return markup
 
 
-def report_summary_actions(period: str, card_id: int, category_id: int, count: int) -> InlineKeyboardMarkup:
-    key = f"{period}:{card_id}:{category_id}"
-    rows = []
-    if count:
-        rows.append([_button(texts.BTN_TRANSACTIONS.format(count=count), f"rpv:{key}:1")])
-        rows.append([_button(texts.BTN_PICTURE, f"rpi:{key}"), _button(texts.BTN_CSV, f"rpx:{key}")])
-    rows.append([_button(texts.BTN_FILTER, f"rpp:{period}"), _button(texts.BTN_PERIOD, "rp:start")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def report_list_actions(period: str, card_id: int, category_id: int, page: int, pages: int) -> InlineKeyboardMarkup:
-    key = f"{period}:{card_id}:{category_id}"
+def report_list_actions(key: ReportKey, page: int, pages: int) -> InlineKeyboardMarkup:
     navigation = []
     if page > 1:
-        navigation.append(_button("◀️", f"rpv:{key}:{page - 1}"))
+        navigation.append(_button("◀️", f"rpv:{key.data}:{page - 1}"))
     if page < pages:
-        navigation.append(_button("▶️", f"rpv:{key}:{page + 1}"))
+        navigation.append(_button("▶️", f"rpv:{key.data}:{page + 1}"))
     rows = [navigation] if navigation else []
-    rows.append([_button(texts.BTN_SUMMARY, f"rpv:{key}:0"), _button(texts.BTN_CSV, f"rpx:{key}")])
+    rows.append([_button(texts.BTN_SUMMARY, f"rpv:{key.data}:0"), _button(texts.BTN_CSV, f"rpx:{key.data}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -232,15 +271,17 @@ def export_periods() -> InlineKeyboardMarkup:
 
 
 def settings_menu(daily_enabled: bool, weekly_enabled: bool, monthly_enabled: bool) -> InlineKeyboardMarkup:
-    daily = texts.ON if daily_enabled else texts.OFF
-    weekly = texts.ON if weekly_enabled else texts.OFF
-    monthly = texts.ON if monthly_enabled else texts.OFF
+    def mark(enabled: bool) -> str:
+        return texts.MARK_ON if enabled else texts.MARK_OFF
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [_button(texts.BTN_TIMEZONE, "set:tz"), _button(texts.BTN_CURRENCY, "set:cur")],
-            [_button(texts.BTN_DAILY.format(state=daily), "set:daily")],
-            [_button(texts.BTN_WEEKLY.format(state=weekly), "set:weekly")],
-            [_button(texts.BTN_NOTIFICATIONS.format(state=monthly), "set:notif")],
+            [
+                _button(texts.BTN_DAILY.format(mark=mark(daily_enabled)), "set:daily"),
+                _button(texts.BTN_WEEKLY.format(mark=mark(weekly_enabled)), "set:weekly"),
+                _button(texts.BTN_NOTIFICATIONS.format(mark=mark(monthly_enabled)), "set:notif"),
+            ],
             [_button(texts.BTN_WIPE, "set:wipe")],
         ]
     )

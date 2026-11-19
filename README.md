@@ -11,18 +11,20 @@ Siz:  💸 Oplata
 
 Bot:  💸 Chiqim aniqlandi:
       Summa: 54 000 UZS · Joy: YANDEX GO · Karta: ****1234 · Vaqt: 19.11.2026 12:01
-      Nima uchun qilindi?                         [Tahrirlash] [Bekor qilish]
+      Nima uchun qilindi?      [Tahrirlash] [Bekor qilish] [O‘z kartamga o‘tkazma]
 Siz:  Taksi — uyga qaytish
 Bot:  Qaysi turga kiradi?    [P2P] [Ovqatlanish] [Narsa sotib olish] … [+ Yangi tur]
-Bot:  Qaysi kartadan qilindi?   [✓ Asosiy Humo ****1234] [+ Yangi karta] [Kartasiz]
-Bot:  ✅ Saqlandi
+Bot:  ✅ Saqlandi: 💸 54 000 UZS — YANDEX GO
+      🔁 P2P · Asosiy Humo ****1234
 ```
+
+Xabardagi karta ro‘yxatingizda bo‘lsa, bot uni o‘zi qo‘yadi; «Qaysi kartadan?» savoli faqat karta aniqlanmaganda beriladi.
 
 ## Imkoniyatlar
 
 - **Kiritish:** CardXabarBot va HUMOcardbot xabarlari, bank SMS’i (lotin/kirill), oddiy matn («Kamolonda 250 ming so‘m ovqatlandik»), screenshot (AI kaliti sozlangan bo‘lsa), `/add`.
-- **Uch savol:** nima uchun qilindi (izoh), qaysi turga kiradi, qaysi kartadan.
-- **Hisobot:** `/report` — davr → karta → tur bo‘yicha filtr; yig‘indilar, kartalar va turlar bo‘yicha taqsimot, eng katta xarajatlar, har bir tranzaksiya izohi bilan ro‘yxat, CSV.
+- **Savollar:** nima uchun qilindi (izoh), qaysi turga kiradi va — karta xabardan aniqlanmasa — qaysi kartadan.
+- **Hisobot:** `/report` darhol shu oyning hamma kartalar bo‘yicha hisobotini ko‘rsatadi; davr, karta va tur filtri ostidagi tugmalarda. Yig‘indilar, kartalar va turlar bo‘yicha taqsimot, eng katta xarajatlar, har bir tranzaksiya izohi bilan ro‘yxat, rasm, CSV.
 - **Avtomatik hisobotlar:** har kuni 21:00 da kunlik (matn), har dushanba haftalik va har oyning 1-kuni oylik (rasm + matn). Har biri `/settings` da alohida o‘chiriladi.
 - **O‘z kartalar orasidagi o‘tkazma:** hisobotga yozilmaydi. Xulosadagi «O‘z kartamga o‘tkazma» tugmasi bilan, yoki ikkala tomonni tashlasangiz (bir kartadan chiqim, boshqasiga shu summada kirim, orasi 10 daqiqagacha) bot o‘zi sezib so‘raydi. Jo‘natuvchi tomondagi 2% gacha komissiya farqi ham shu juftlik deb olinadi va yozilmaydi.
 - **O‘rganish:** bir joy uchun tanlangan tur keyingi safar ⭐ bilan taklif qilinadi.
@@ -38,7 +40,7 @@ Bot boshqa botlarning xabarlarini o‘zi o‘qimaydi: faqat siz forward qilgan y
 | `/start` | Botni tanishtirish, profil yaratish |
 | `/add` | Qo‘lda tranzaksiya qo‘shish |
 | `/cards`, `/addcard` | Kartalar ro‘yxati, yangi karta |
-| `/report` | Hisobot (bugun, hafta, oy, o‘tgan oylar; karta va tur filtri) |
+| `/report` | Shu oy hisoboti; tugmalar bilan davr, karta va tur filtri |
 | `/stat` | Oxirgi 30 kun va 6 oylik trend |
 | `/categories` | Turlar (qo‘shish, o‘chirish) |
 | `/export` | CSV fayl |

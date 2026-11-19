@@ -1,13 +1,14 @@
 """/report, /stat va /export.
 
-Hisobot uch bosqichda tanlanadi: davr → karta → tur. Natijani tranzaksiyalar
-ro‘yxati (har birining izohi bilan) yoki CSV fayl sifatida ko‘rish mumkin.
+/report darhol shu oyning hamma kartalar bo‘yicha hisobotini ko‘rsatadi. Davr, karta va
+tur filtri hisobot ostidagi tugmalarda; har biri bir bosishda o‘zgaradi va qolganlari saqlanadi.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from math import ceil
 
 from aiogram import F, Router
@@ -32,99 +33,118 @@ PAGE_SIZE = 10
 logger = logging.getLogger(__name__)
 
 
-async def _periods_view(session: AsyncSession, user: User, clock: Clock):
-    months = await rs.list_months(session, user.id, user.tz, clock())
-    return texts.ASK_PERIOD, kb.report_periods(months)
+@dataclass(frozen=True)
+class View:
+    """Callback’dan o‘qilgan hisobot ko‘rinishi."""
+
+    period: Period
+    key: kb.ReportKey
+    report_filter: rs.ReportFilter
+    filter_line: str  # faqat faol filtrlar; filtr bo‘lmasa bo‘sh
+
+
+async def _view(
+    session: AsyncSession, user: User, clock: Clock, code: str, card_id: int, category_id: int
+) -> View | None:
+    """Davr va filtrlarni tekshiradi. Begona karta yoki tur ID’si hech narsa topmaydi."""
+    try:
+        period = period_range(code, user.tz, clock())
+    except ValueError:
+        return None
+
+    card_label, category_label = texts.ALL_CARDS, f"🏷 {texts.ALL_CATEGORIES}"
+    active: list[str] = []
+    if card_id:
+        card = await ts.get_card(session, user.id, card_id)
+        card_label = card.name if card else texts.UNKNOWN_CARD
+        active.append(f"💳 {render.card_title(card) if card else texts.UNKNOWN_CARD}")
+    if category_id:
+        category = await ts.get_category(session, user.id, category_id)
+        category_label = f"{category.emoji} {category.name}" if category else texts.UNKNOWN_CATEGORY
+        active.append(category_label)
+
+    return View(
+        period=period,
+        key=kb.ReportKey(code, period.label, card_id, card_label, category_id, category_label),
+        report_filter=rs.ReportFilter(
+            start=period.start, end=period.end, card_id=card_id or None, category_id=category_id or None
+        ),
+        filter_line=" · ".join(active),
+    )
+
+
+async def _view_from_callback(
+    callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
+) -> View | None:
+    _, code, card_raw, category_raw, *_ = callback.data.split(":")
+    view = await _view(session, user, clock, code, int(card_raw), int(category_raw))
+    if view is None:
+        callback_answer.text = texts.STALE_BUTTON
+    return view
+
+
+async def _summary(session: AsyncSession, user: User, view: View):
+    report = await rs.build_report(session, user.id, view.report_filter, user.preferred_currency)
+    text = render.report_text(view.period.label, view.filter_line, report, user.tz)
+    return text, kb.report_summary_actions(view.key, report.count)
 
 
 async def cmd_report(message: Message, state: FSMContext, session: AsyncSession, user: User, clock: Clock) -> None:
     await state.clear()
-    text, markup = await _periods_view(session, user, clock)
+    view = await _view(session, user, clock, "m", 0, 0)
+    text, markup = await _summary(session, user, view)
     await message.answer(text, reply_markup=markup)
-
-
-async def on_report_start(callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock) -> None:
-    text, markup = await _periods_view(session, user, clock)
-    await edit_or_send(callback, text, markup)
-
-
-def _period(code: str, user: User, clock: Clock) -> Period | None:
-    try:
-        return period_range(code, user.tz, clock())
-    except ValueError:
-        return None
-
-
-async def on_period(
-    callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
-) -> None:
-    code = callback.data.split(":", 1)[1]
-    period = _period(code, user, clock)
-    if period is None:
-        callback_answer.text = texts.STALE_BUTTON
-        return
-    cards = await ts.list_cards(session, user.id)
-    await edit_or_send(callback, f"📊 <b>{period.label}</b>\n{texts.ASK_REPORT_CARD}", kb.report_cards(code, cards))
-
-
-async def on_card(
-    callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
-) -> None:
-    _, code, card_id = callback.data.split(":")
-    period = _period(code, user, clock)
-    if period is None:
-        callback_answer.text = texts.STALE_BUTTON
-        return
-    categories = await ts.list_categories(session, user.id)
-    await edit_or_send(
-        callback,
-        f"📊 <b>{period.label}</b>\n{texts.ASK_REPORT_CATEGORY}",
-        kb.report_categories(code, int(card_id), categories),
-    )
-
-
-async def _filter(
-    session: AsyncSession, user: User, period: Period, card_id: int, category_id: int
-) -> tuple[rs.ReportFilter, str]:
-    """Filtr va uning foydalanuvchiga ko‘rinadigan tavsifi. Begona ID’lar hech narsa topmaydi."""
-    card_label, category_label = texts.ALL_CARDS, texts.ALL_CATEGORIES
-    if card_id:
-        card = await ts.get_card(session, user.id, card_id)
-        card_label = render.card_title(card) if card else texts.UNKNOWN_CARD
-    if category_id:
-        category = await ts.get_category(session, user.id, category_id)
-        category_label = f"{category.emoji} {category.name}" if category else texts.UNKNOWN_CATEGORY
-    report_filter = rs.ReportFilter(
-        start=period.start, end=period.end, card_id=card_id or None, category_id=category_id or None
-    )
-    return report_filter, f"💳 {card_label} · 🏷 {category_label}"
 
 
 async def on_view(
     callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
 ) -> None:
-    _, code, card_raw, category_raw, page_raw = callback.data.split(":")
-    card_id, category_id, page = int(card_raw), int(category_raw), int(page_raw)
-    period = _period(code, user, clock)
-    if period is None:
-        callback_answer.text = texts.STALE_BUTTON
+    view = await _view_from_callback(callback, session, user, clock, callback_answer)
+    if view is None:
         return
-    report_filter, filter_line = await _filter(session, user, period, card_id, category_id)
-
-    total = await rs.count_transactions(session, user.id, report_filter) if page else 0
+    page = int(callback.data.rsplit(":", 1)[1])
+    total = await rs.count_transactions(session, user.id, view.report_filter) if page else 0
     if page and total:
         pages = ceil(total / PAGE_SIZE)
         page = min(page, pages)
         transactions = await rs.fetch_transactions(
-            session, user.id, report_filter, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE
+            session, user.id, view.report_filter, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE
         )
-        text = render.transactions_page(period.label, filter_line, transactions, page, pages, user.tz)
-        markup = kb.report_list_actions(code, card_id, category_id, page, pages)
+        text = render.transactions_page(view.period.label, view.filter_line, transactions, page, pages, user.tz)
+        markup = kb.report_list_actions(view.key, page, pages)
     else:
-        report = await rs.build_report(session, user.id, report_filter, user.preferred_currency)
-        text = render.report_text(period.label, filter_line, report, user.tz)
-        markup = kb.report_summary_actions(code, card_id, category_id, report.count)
+        text, markup = await _summary(session, user, view)
     await edit_or_send(callback, text, markup)
+
+
+async def on_pick_period(
+    callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
+) -> None:
+    view = await _view_from_callback(callback, session, user, clock, callback_answer)
+    if view is None:
+        return
+    months = await rs.list_months(session, user.id, user.tz, clock())
+    await edit_or_send(callback, texts.ASK_PERIOD, kb.report_periods(view.key, months))
+
+
+async def on_pick_card(
+    callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
+) -> None:
+    view = await _view_from_callback(callback, session, user, clock, callback_answer)
+    if view is None:
+        return
+    cards = await ts.list_cards(session, user.id)
+    await edit_or_send(callback, texts.ASK_REPORT_CARD, kb.report_cards(view.key, cards))
+
+
+async def on_pick_category(
+    callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
+) -> None:
+    view = await _view_from_callback(callback, session, user, clock, callback_answer)
+    if view is None:
+        return
+    categories = await ts.list_categories(session, user.id)
+    await edit_or_send(callback, texts.ASK_REPORT_CATEGORY, kb.report_categories(view.key, categories))
 
 
 async def _send_csv(target: Message, session: AsyncSession, user: User, period: Period, report_filter, now) -> bool:
@@ -140,13 +160,11 @@ async def _send_csv(target: Message, session: AsyncSession, user: User, period: 
 async def on_report_csv(
     callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
 ) -> None:
-    _, code, card_raw, category_raw = callback.data.split(":")
-    period = _period(code, user, clock)
-    if period is None:
-        callback_answer.text = texts.STALE_BUTTON
+    view = await _view_from_callback(callback, session, user, clock, callback_answer)
+    if view is None:
         return
-    report_filter, _ = await _filter(session, user, period, int(card_raw), int(category_raw))
-    if not await _send_csv(callback_message(callback), session, user, period, report_filter, clock()):
+    sent = await _send_csv(callback_message(callback), session, user, view.period, view.report_filter, clock())
+    if not sent:
         callback_answer.text = texts.REPORT_EMPTY
         callback_answer.show_alert = True
 
@@ -154,28 +172,24 @@ async def on_report_csv(
 async def on_report_picture(
     callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
 ) -> None:
-    _, code, card_raw, category_raw = callback.data.split(":")
-    period = _period(code, user, clock)
-    if period is None:
-        callback_answer.text = texts.STALE_BUTTON
+    view = await _view_from_callback(callback, session, user, clock, callback_answer)
+    if view is None:
         return
-    report_filter, filter_line = await _filter(session, user, period, int(card_raw), int(category_raw))
-    report = await rs.build_report(session, user.id, report_filter, user.preferred_currency)
+    report = await rs.build_report(session, user.id, view.report_filter, user.preferred_currency)
     if report.count == 0:
         callback_answer.text = texts.REPORT_EMPTY
         callback_answer.show_alert = True
         return
     main, others = report.currencies[0], [item.currency for item in report.currencies[1:]]
     try:
-        image = await asyncio.to_thread(render_report_image, texts.REPORT_HEADING, period.label, main, others)
+        image = await asyncio.to_thread(render_report_image, texts.REPORT_HEADING, view.period.label, main, others)
     except Exception as error:  # noqa: BLE001 - rasm chiqmasa ham bot ishlashda davom etadi
         logger.warning("Report picture failed: %s", type(error).__name__)
         callback_answer.text = texts.PICTURE_FAILED
         callback_answer.show_alert = True
         return
-    await callback_message(callback).answer_photo(
-        BufferedInputFile(image, filename="hisobot.png"), caption=f"📊 {period.label}\n{filter_line}"
-    )
+    caption = f"📊 {view.period.label}" + (f"\n{view.filter_line}" if view.filter_line else "")
+    await callback_message(callback).answer_photo(BufferedInputFile(image, filename="hisobot.png"), caption=caption)
 
 
 async def cmd_stat(message: Message, state: FSMContext, session: AsyncSession, user: User, clock: Clock) -> None:
@@ -192,29 +206,29 @@ async def cmd_export(message: Message, state: FSMContext) -> None:
 async def on_export(
     callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
 ) -> None:
-    period = _period(callback.data.split(":", 1)[1], user, clock)
-    if period is None:
+    view = await _view(session, user, clock, callback.data.split(":", 1)[1], 0, 0)
+    if view is None:
         callback_answer.text = texts.STALE_BUTTON
         return
-    report_filter = rs.ReportFilter(start=period.start, end=period.end)
     message = callback_message(callback)
-    if not await _send_csv(message, session, user, period, report_filter, clock()):
-        await message.answer(f"📄 {period.label}: {texts.REPORT_EMPTY}")
+    if not await _send_csv(message, session, user, view.period, view.report_filter, clock()):
+        await message.answer(f"📄 {view.period.label}: {texts.REPORT_EMPTY}")
 
 
 def create_router() -> Router:
     router = Router(name="reports")
     message, callback = router.message, router.callback_query
+    key = r"[\w-]+:\d+:\d+"
 
     message.register(cmd_report, Command("report"))
     message.register(cmd_stat, Command("stat"))
     message.register(cmd_export, Command("export"))
 
-    callback.register(on_report_start, F.data == "rp:start")
-    callback.register(on_period, F.data.regexp(r"^rpp:[\w-]+$"))
-    callback.register(on_card, F.data.regexp(r"^rpc:[\w-]+:\d+$"))
-    callback.register(on_view, F.data.regexp(r"^rpv:[\w-]+:\d+:\d+:\d+$"))
-    callback.register(on_report_csv, F.data.regexp(r"^rpx:[\w-]+:\d+:\d+$"))
-    callback.register(on_report_picture, F.data.regexp(r"^rpi:[\w-]+:\d+:\d+$"))
+    callback.register(on_view, F.data.regexp(rf"^rpv:{key}:\d+$"))
+    callback.register(on_pick_period, F.data.regexp(rf"^rpp:{key}$"))
+    callback.register(on_pick_card, F.data.regexp(rf"^rpc:{key}$"))
+    callback.register(on_pick_category, F.data.regexp(rf"^rpg:{key}$"))
+    callback.register(on_report_csv, F.data.regexp(rf"^rpx:{key}$"))
+    callback.register(on_report_picture, F.data.regexp(rf"^rpi:{key}$"))
     callback.register(on_export, F.data.regexp(r"^ex:[\w-]+$"))
     return router
