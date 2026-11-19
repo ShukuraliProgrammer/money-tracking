@@ -34,7 +34,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
-    # Port tashqariga ochilmaydi: bazaga faqat bot konteyneri ulanadi.
+    ports:
+      # Baza faqat serverning o'zidan (127.0.0.1) ko'rinadi, internetga ochilmaydi.
+      # pgAdmin kabi dasturlar SSH tunnel orqali ulanadi (README: Bazaga ulanish).
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
 
   redis:
     image: redis:7-alpine

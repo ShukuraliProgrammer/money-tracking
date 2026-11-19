@@ -226,6 +226,44 @@ Eslatmalar:
 - **Mavjud ma’lumotlar.** Yangi serverda baza bo‘sh boshlanadi. Boshqa PostgreSQL’dan ko‘chirayotgan bo‘lsangiz, `pg_dump` nusxasini tiklang va eski `ENCRYPTION_KEY`’ni ham olib o‘ting; kalit boshqa bo‘lsa, eski izohlar o‘qilmaydi. Eski SQLite bazasi avtomatik ko‘chirilmaydi.
 - **Serverda kodni qo‘lda o‘zgartirmang.** Avtomatik yangilash `git pull --ff-only` ishlatadi: serverdagi nusxada commit qilinmagan o‘zgarish bo‘lsa, to‘xtaydi.
 
+## Bazaga ulanish (pgAdmin)
+
+PostgreSQL serverda faqat `127.0.0.1:5432` da ochiq, internetdan ko‘rinmaydi. Kompyuteringizdagi pgAdmin unga SSH tunnel orqali ulanadi.
+
+pgAdmin → **Register → Server**:
+
+| Bo‘lim | Maydon | Qiymat |
+|---|---|---|
+| General | Name | MoneyTrack |
+| Connection | Host name/address | `127.0.0.1` |
+| Connection | Port | `5432` |
+| Connection | Maintenance database | `moneytrack` |
+| Connection | Username | `moneytrack` |
+| Connection | Password | serverdagi `.env` faylidagi `POSTGRES_PASSWORD` |
+| SSH Tunnel | Use SSH tunneling | yoqilgan |
+| SSH Tunnel | Tunnel host | server IP manzili |
+| SSH Tunnel | Tunnel port | `22` |
+| SSH Tunnel | Username | serverga kiradigan foydalanuvchingiz |
+| SSH Tunnel | Authentication | serverga qanday kirsangiz shunday: parol yoki kalit fayli |
+
+Parolni ko‘rish (serverda, repo papkasida):
+
+```bash
+grep POSTGRES_PASSWORD .env
+```
+
+pgAdmin’ning SSH tunneli ishlamasa, tunnelni o‘zingiz oching va pgAdmin’da `localhost`, port `5433` ga ulaning (SSH Tunnel bo‘limini o‘chirib):
+
+```bash
+ssh -N -L 5433:127.0.0.1:5432 FOYDALANUVCHI@SERVER_IP
+```
+
+Bilib qo‘ying:
+
+- `transactions` jadvalidagi `raw_text`, `user_note` va `ai_summary` ustunlari shifrlangan, pgAdmin’da `gAAAA…` ko‘rinishida chiqadi. Qolgan ustunlar (summa, joy, sana, karta) ochiq.
+- Serverda 5432 port band bo‘lsa, `.env` ga `POSTGRES_PORT=5433` yozing va `docker compose up -d` qiling.
+- Bazani internetga to‘g‘ridan-to‘g‘ri ochish (`POSTGRES_BIND=0.0.0.0`) tavsiya etilmaydi; shunday qilsangiz, firewall bilan faqat o‘z IP manzilingizga ruxsat bering.
+
 ## Xabar qanday o‘qiladi
 
 1. **Tozalash.** 13–19 xonali karta raqamlari `****1234` ko‘rinishiga keltiriladi. SMS kod, parol, PIN yoki CVV ga o‘xshash xabar umuman qayta ishlanmaydi.
