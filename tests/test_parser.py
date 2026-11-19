@@ -245,3 +245,64 @@ def test_balance_written_before_the_amount_is_not_taken_as_amount():
 def test_message_with_only_a_balance_has_no_amount():
     parsed = rule_parse("Karta *1234. Qoldiq: 2 345 000 so'm")
     assert parsed.amount is None
+
+
+# --- Screenshot ------------------------------------------------------------------------ #
+
+from app.services.llm import ImageInput  # noqa: E402
+
+IMAGE = ImageInput(b"\xff\xd8fake", "image/jpeg")
+
+
+class FakeVisionLLM(FakeLLM):
+    async def parse_screenshot(self, image, tz_name, now, categories):
+        self.calls.append(image)
+        if self.error:
+            raise self.error
+        return LLMTransaction.model_validate(self.result)
+
+
+def vision_result(**overrides) -> dict:
+    base = llm_result(
+        card_last4="1234", card_network="Humo", occurred_at="2026-11-19T12:01:00+05:00",
+        visible_text="Oplata\n➖ 250.000,00 UZS\n📍 KAMOLON\n💳 HUMOCARD *1234\n🕓 12:01 19.11.2026",
+    )  # fmt: skip
+    return base | overrides
+
+
+async def test_screenshot_is_parsed_through_llm_and_marked_as_screenshot():
+    llm = FakeVisionLLM(vision_result())
+    parsed = await TransactionParser(llm).parse_screenshot(IMAGE, TZ, NOW)
+    assert llm.calls == [IMAGE]
+    assert parsed.source == "screenshot"
+    assert parsed.amount == Decimal("250000")
+    assert parsed.transaction_type == "expense"
+    assert parsed.card_last4 == "1234"
+    assert parsed.occurred_at == datetime(2026, 11, 19, 12, 1, tzinfo=TZ)
+    assert "KAMOLON" in parsed.raw_text
+
+
+async def test_screenshot_text_never_keeps_full_card_number():
+    llm = FakeVisionLLM(vision_result(visible_text="Karta 8600123456789012 Oplata 250 000 UZS 19.11.2026 12:01", card_last4="9012"))
+    parsed = await TransactionParser(llm).parse_screenshot(IMAGE, TZ, NOW)
+    assert "8600123456789012" not in parsed.raw_text
+    assert parsed.card_last4 == "9012"
+
+
+async def test_screenshot_card_and_date_must_be_visible_in_the_picture():
+    llm = FakeVisionLLM(vision_result(visible_text="Kamolon 250 000 so'm", card_last4="7777"))
+    parsed = await TransactionParser(llm).parse_screenshot(IMAGE, TZ, NOW)
+    assert parsed.card_last4 is None
+    assert parsed.occurred_at is None
+
+
+async def test_screenshot_without_llm_is_not_supported():
+    parser = TransactionParser(None)
+    assert parser.supports_screenshots is False
+    with pytest.raises(LLMError):
+        await parser.parse_screenshot(IMAGE, TZ, NOW)
+
+
+async def test_screenshot_llm_failure_is_reported():
+    with pytest.raises(LLMError):
+        await TransactionParser(FakeVisionLLM(error=LLMError("down"))).parse_screenshot(IMAGE, TZ, NOW)

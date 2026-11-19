@@ -14,7 +14,7 @@ from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from app.schemas import LLMTransaction, ParsedTransaction
-from app.services.llm import LLMError
+from app.services.llm import ImageInput, LLMError
 from app.utils.dates import find_datetime, relative_day_offset
 from app.utils.money import AmountMatch, find_amounts, format_amount
 from app.utils.validators import CardHint, mask_card_numbers, unify_apostrophes
@@ -245,6 +245,23 @@ class TransactionParser:
         except LLMError as error:
             logger.warning("LLM parse failed, using rule-based result: %s", error)
             return rule
+        return self._merge(rule, answer, tz)
+
+    @property
+    def supports_screenshots(self) -> bool:
+        """Rasmni o‘qish uchun LLM sozlangan bo‘lishi kerak."""
+        return self._llm is not None and hasattr(self._llm, "parse_screenshot")
+
+    async def parse_screenshot(
+        self, image: ImageInput, tz: ZoneInfo, now: datetime, categories: list[str] | None = None
+    ) -> ParsedTransaction:
+        """Screenshot’ni LLM o‘qiydi; natija matnli xabar bilan bir xil tekshiruvlardan o‘tadi."""
+        if not self.supports_screenshots:
+            raise LLMError("no LLM configured for screenshots")
+        answer = await self._llm.parse_screenshot(image, str(tz), now.astimezone(tz), categories or [])
+        # LLM ko‘chirib bergan matn ham qoidalardan o‘tadi: karta raqami yashiriladi, karta va sana
+        # faqat shu matnda ko‘rinsa qabul qilinadi.
+        rule = self._rules.parse(answer.visible_text or "", tz, now, source_hint="screenshot")
         return self._merge(rule, answer, tz)
 
     @staticmethod

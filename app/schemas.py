@@ -66,6 +66,8 @@ class LLMTransaction(BaseModel):
     confidence: float = 0.5
     missing_fields: list[str] = Field(default_factory=list)
     explanation: str | None = None
+    # Faqat screenshot uchun: rasmdagi tranzaksiya matni (karta raqami yashirilgan holda).
+    visible_text: str | None = None
 
     @field_validator("amount", mode="before")
     @classmethod
@@ -83,7 +85,7 @@ class LLMTransaction(BaseModel):
     def _currency(cls, value: Any) -> str:
         return _clean_currency(value)
 
-    @field_validator("merchant", "category_guess", "explanation", mode="before")
+    @field_validator("merchant", "category_guess", "explanation", "visible_text", mode="before")
     @classmethod
     def _blank_to_none(cls, value: Any) -> Any:
         if isinstance(value, str):

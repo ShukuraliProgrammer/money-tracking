@@ -165,3 +165,68 @@ def test_note_analysis_normalizes_bad_period():
     model = LLMNoteAnalysis.model_validate({"recurring_period": "fortnightly", "people_count": 0})
     assert model.recurring_period == "none"
     assert model.people_count is None
+
+
+# --- Screenshot (rasm) ---------------------------------------------------------------- #
+
+from app.services.llm import (  # noqa: E402
+    SCREENSHOT_SYSTEM_PROMPT,
+    ImageInput,
+    anthropic_user_content,
+    openai_user_content,
+)
+
+SCREENSHOT_REPLY = json.dumps(json.loads(VALID_TRANSACTION) | {"visible_text": "Oplata 250 000 UZS KAMOLON *1234"})
+
+
+class ImageClient(ScriptedClient):
+    def __init__(self, *replies):
+        super().__init__(*replies)
+        self.images = []
+
+    async def complete(self, system, user, schema, image=None):
+        self.images.append(image)
+        return await super().complete(system, user, schema)
+
+
+async def test_parse_screenshot_sends_image_and_returns_visible_text():
+    client = ImageClient(SCREENSHOT_REPLY)
+    image = ImageInput(b"\xff\xd8fake-jpeg", "image/jpeg")
+    result = await LLMService(client).parse_screenshot(image, "Asia/Tashkent", NOW, ["Ovqatlanish"])
+    assert client.images == [image]
+    assert result.visible_text == "Oplata 250 000 UZS KAMOLON *1234"
+    assert result.amount == 250000
+    system, user = client.prompts[0]
+    assert system == SCREENSHOT_SYSTEM_PROMPT
+    assert "Asia/Tashkent" in user and "Ovqatlanish" in user
+
+
+async def test_text_parsing_sends_no_image():
+    client = ImageClient(VALID_TRANSACTION)
+    await LLMService(client).parse_transaction("xabar", "Asia/Tashkent", NOW, [])
+    assert client.images == [None]
+
+
+def test_screenshot_prompt_keeps_the_extraction_rules_and_asks_for_transcription():
+    assert "visible_text" in SCREENSHOT_SYSTEM_PROMPT
+    assert "Never use the current time as a default" in SCREENSHOT_SYSTEM_PROMPT
+    assert "Never output more than four card digits" in SCREENSHOT_SYSTEM_PROMPT
+    assert "visible_text" not in PARSE_SYSTEM_PROMPT
+
+
+def test_anthropic_content_puts_image_before_text():
+    content = anthropic_user_content("matn", ImageInput(b"abc", "image/png"))
+    assert content == [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "YWJj"}},
+        {"type": "text", "text": "matn"},
+    ]
+    assert anthropic_user_content("matn", None) == "matn"
+
+
+def test_openai_content_uses_data_url():
+    content = openai_user_content("matn", ImageInput(b"abc", "image/jpeg"))
+    assert content == [
+        {"type": "text", "text": "matn"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,YWJj"}},
+    ]
+    assert openai_user_content("matn", None) == "matn"

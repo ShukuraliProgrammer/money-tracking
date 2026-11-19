@@ -8,11 +8,12 @@ Bot faqat foydalanuvchining o‘zi yuborgan yoki forward qilgan xabar bilan ishl
 
 from __future__ import annotations
 
+import logging
 from contextlib import suppress
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -34,6 +35,7 @@ from app.models import User
 from app.schemas import NoteAnalysis, ParsedTransaction
 from app.services import transaction_service as ts
 from app.services.notes import NoteAnalyzer
+from app.services.llm import ImageInput, LLMError
 from app.services.parser import RuleBasedParser, TransactionParser
 from app.services.transfers import Leg, find_transfer_counterpart, is_transfer_pair, split_pair
 from app.utils.dates import parse_user_datetime
@@ -48,11 +50,14 @@ from app.utils.validators import (
 MAX_TEXT_LENGTH = 2000
 MAX_NOTE_LENGTH = 500
 MAX_AMOUNT = Decimal("10000000000000")
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 _FORWARD_SOURCES = {"cardxabarbot": "cardxabar", "humocardbot": "humo"}
 _rules = RuleBasedParser()
+logger = logging.getLogger(__name__)
 
 PLAIN_TEXT = F.text & ~F.text.startswith("/")
+IMAGE = F.photo | F.document.mime_type.startswith("image/")
 BUTTON_STATES = (
     TxFlow.waiting_type,
     TxFlow.waiting_duplicate,
@@ -172,29 +177,77 @@ async def on_new_message(
         await message.answer(texts.SECRET_WARNING)
         return
 
-    source_hint, forwarded_at = forward_info(message)
+    source_hint, _ = forward_info(message)
     categories = [category.name for category in await ts.list_categories(session, user.id)]
     draft = await parser.parse(text, user.tz, clock(), source_hint=source_hint, categories=categories)
 
     if draft.amount is None and draft.transaction_type is None and draft.card_last4 is None:
         await message.answer(texts.NOT_UNDERSTOOD)
         return
-
-    if draft.occurred_at is None and forwarded_at is not None:
-        # Matnda sana yo‘q, lekin forward qilingan xabarning asl yuborilgan vaqti ma’lum.
-        draft.occurred_at = forwarded_at
-    draft.refresh_missing_fields()
-
-    await state.set_data({"draft": draft.model_dump(mode="json")})
     if contains_full_card_number(text):
         with suppress(TelegramAPIError):
             await message.delete()
         await message.answer(texts.PAN_NOTICE)
+    await _start_draft(message, state, session, user, draft)
+
+
+async def _start_draft(
+    message: Message, state: FSMContext, session: AsyncSession, user: User, draft: ParsedTransaction
+) -> None:
+    _, forwarded_at = forward_info(message)
+    if draft.occurred_at is None and forwarded_at is not None:
+        # Sana yozilmagan, lekin forward qilingan xabarning asl yuborilgan vaqti ma’lum.
+        draft.occurred_at = forwarded_at
+    draft.refresh_missing_fields()
+    await state.set_data({"draft": draft.model_dump(mode="json")})
     await advance(message, state, session, user)
 
 
-async def on_photo(message: Message) -> None:
-    await message.answer(texts.PHOTO_NOT_SUPPORTED)
+async def on_image(
+    message: Message,
+    bot: Bot,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    parser: TransactionParser,
+    clock: Clock,
+) -> None:
+    """Screenshot: rasmni LLM o‘qiydi, keyin oqim matnli xabardagi bilan bir xil."""
+    if not parser.supports_screenshots:
+        await message.answer(texts.PHOTO_NEEDS_AI)
+        return
+    file = message.photo[-1] if message.photo else message.document
+    if (file.file_size or 0) > MAX_IMAGE_BYTES:
+        await message.answer(texts.PHOTO_TOO_LARGE)
+        return
+    media_type = "image/jpeg" if message.photo else (message.document.mime_type or "image/jpeg")
+
+    with suppress(TelegramAPIError):
+        await bot.send_chat_action(message.chat.id, "typing")
+    try:
+        buffer = await bot.download(file)
+        categories = [category.name for category in await ts.list_categories(session, user.id)]
+        draft = await parser.parse_screenshot(
+            ImageInput(buffer.getvalue(), media_type), user.tz, clock(), categories=categories
+        )
+    except (LLMError, TelegramAPIError) as error:
+        logger.warning("Screenshot not read: %s", type(error).__name__)
+        await message.answer(texts.PHOTO_FAILED)
+        return
+
+    if contains_secret_code(draft.raw_text):
+        with suppress(TelegramAPIError):
+            await message.delete()
+        await message.answer(texts.SECRET_WARNING)
+        return
+    if draft.amount is None and draft.transaction_type is None and draft.card_last4 is None:
+        await message.answer(texts.PHOTO_NO_TRANSACTION)
+        return
+    await _start_draft(message, state, session, user, draft)
+
+
+async def on_image_while_busy(message: Message) -> None:
+    await message.answer(texts.BUSY)
 
 
 async def on_unsupported(message: Message) -> None:
@@ -618,7 +671,8 @@ def create_router() -> Router:
     message.register(on_new_card_last4, TxFlow.waiting_new_card_last4, PLAIN_TEXT)
     message.register(on_new_card_name, TxFlow.waiting_new_card_name, PLAIN_TEXT)
     message.register(on_text_instead_of_button, StateFilter(*BUTTON_STATES), PLAIN_TEXT)
-    message.register(on_photo, F.photo)
+    message.register(on_image, StateFilter(None, TxFlow.waiting_input), IMAGE)
+    message.register(on_image_while_busy, IMAGE)
     message.register(on_new_message, StateFilter(None, TxFlow.waiting_input), PLAIN_TEXT)
     message.register(on_unsupported)
     return router

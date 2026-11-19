@@ -15,8 +15,8 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.methods import EditMessageText, GetMe, SendDocument, SendMessage, SendPhoto, TelegramMethod
-from aiogram.types import Chat, Message, Update, User
+from aiogram.methods import EditMessageText, GetFile, GetMe, SendDocument, SendMessage, SendPhoto, TelegramMethod
+from aiogram.types import Chat, File, Message, Update, User
 
 from app.bot.dispatcher import build_dispatcher
 from app.services.notes import NoteAnalyzer
@@ -41,12 +41,14 @@ class RecordingSession(BaseSession):
                 chat=Chat(id=int(method.chat_id or 0), type="private"),
                 text=getattr(method, "text", None),
             )
+        if isinstance(method, GetFile):
+            return File(file_id=method.file_id, file_unique_id="u", file_size=20, file_path="photos/file_1.jpg")
         if isinstance(method, GetMe):
             return User(id=42, is_bot=True, first_name="MoneyTrack", username="moneytrack_test_bot")
         return True
 
     async def stream_content(self, *args: Any, **kwargs: Any) -> AsyncGenerator[bytes, None]:
-        yield b""
+        yield b"\xff\xd8fake-jpeg-bytes"
 
 
 class BotHarness:

@@ -56,9 +56,11 @@ TEMPORARY_ERROR = "⚠️ Vaqtincha xatolik, qayta urinib ko‘ring."
 STALE_BUTTON = "Bu tugma eskirgan. Xabarni qaytadan yuboring."
 USE_BUTTONS = "Iltimos, tugmalardan birini tanlang 👆"
 TEXT_ONLY = "Hozircha faqat matnli xabarlarni tushunaman. Tranzaksiya matnini yuboring."
-PHOTO_NOT_SUPPORTED = (
-    "🖼 Screenshot’ni o‘qish keyingi versiyada qo‘shiladi. Hozircha xabarning matnini nusxalab yuboring."
-)
+PHOTO_NEEDS_AI = "🖼 Rasmni o‘qish uchun AI kaliti sozlanmagan. Hozircha xabarning matnini nusxalab yuboring."
+PHOTO_FAILED = "🖼 Rasmni o‘qib bo‘lmadi. Qayta urinib ko‘ring yoki xabarning matnini yuboring."
+PHOTO_NO_TRANSACTION = "🖼 Bu rasmda tranzaksiyani topa olmadim. Karta xabari yoki chek screenshot’ini yuboring."
+PHOTO_TOO_LARGE = "🖼 Rasm juda katta (5 MB dan oshmasin)."
+BUSY = "Avval joriy amalni yakunlang yoki /cancel bosing, keyin qayta yuboring."
 TOO_LONG = "Xabar juda uzun. Bitta tranzaksiya haqidagi xabarni yuboring."
 
 BTN_CANCEL = "❌ Bekor qilish"

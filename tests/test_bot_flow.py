@@ -399,7 +399,7 @@ async def test_user_cannot_attach_another_users_card(bot, session_factory):
     assert await transactions(session_factory) == []
 
 
-async def test_photo_explains_ocr_is_not_available_yet(bot):
+async def test_photo_without_ai_key_asks_for_text_instead(bot):
     await bot.send_photo()
     assert "matnini" in bot.last_text()
 
@@ -585,3 +585,79 @@ async def test_both_sides_forwarded_at_once_are_handled_in_order(bot, session_fa
     assert "o‘tkazmaga o‘xshaydi" in bot.last_text()
     await bot.click("Ha, yozilmasin")
     assert await transactions(session_factory) == []
+
+
+# --- Screenshot (rasm) ---------------------------------------------------------------- #
+
+
+class VisionLLM(FakeLLM):
+    def __init__(self, visible_text=None, error=None, **fields):
+        super().__init__()
+        self.images = []
+        self.error = error
+        self.fields = {
+            "transaction_type": "expense", "amount": 54000, "currency": "UZS", "merchant": "YANDEX GO",
+            "card_last4": "1234", "card_network": "Humo", "occurred_at": "2026-11-19T12:01:00+05:00",
+            "confidence": 0.9, "visible_text": visible_text or samples.HUMO_EXPENSE,
+        } | fields  # fmt: skip
+
+    async def parse_screenshot(self, image, tz_name, now, categories):
+        self.images.append(image)
+        if self.error:
+            raise self.error
+        return LLMTransaction.model_validate(self.fields)
+
+
+async def test_screenshot_goes_through_the_same_three_questions(session_factory):
+    llm = VisionLLM()
+    bot = BotHarness(session_factory, NOW, llm=llm)
+    await bot.send_photo()
+    assert len(llm.images) == 1 and llm.images[0].data  # rasm yuklab olinib AI'ga berildi
+    reply = bot.last_text()
+    assert "Chiqim aniqlandi" in reply and "54 000 UZS" in reply and "YANDEX GO" in reply
+    assert "Nima uchun qilindi?" in reply
+    await bot.send("Taksi")
+    await bot.click("P2P")
+    await bot.click("Kartasiz")
+    (tx,) = await transactions(session_factory)
+    assert tx.source == "screenshot"
+    assert tx.amount == Decimal("54000")
+    assert tx.occurred_at == datetime(2026, 11, 19, 12, 1, tzinfo=TZ)
+
+
+async def test_unreadable_screenshot_gets_friendly_message(session_factory):
+    from app.services.llm import LLMError
+
+    bot = BotHarness(session_factory, NOW, llm=VisionLLM(error=LLMError("timeout")))
+    await bot.send_photo()
+    assert "o‘qib bo‘lmadi" in bot.last_text()
+    await bot.send(samples.HUMO_EXPENSE)
+    assert "Nima uchun qilindi?" in bot.last_text()
+
+
+async def test_screenshot_without_a_transaction_starts_nothing(session_factory):
+    bot = BotHarness(session_factory, NOW, llm=VisionLLM(visible_text="Salom", amount=None, transaction_type=None, card_last4=None))
+    await bot.send_photo()
+    assert "tranzaksiya" in bot.last_text() and "Nima uchun" not in bot.last_text()
+
+
+async def test_screenshot_of_sms_code_is_refused(session_factory):
+    bot = BotHarness(session_factory, NOW, llm=VisionLLM(visible_text="Tasdiqlash kodi: 123456. Hech kimga aytmang"))
+    await bot.send_photo()
+    assert "SMS kod" in bot.last_text()
+    assert await transactions(session_factory) == []
+
+
+async def test_screenshot_missing_amount_is_asked(session_factory):
+    bot = BotHarness(session_factory, NOW, llm=VisionLLM(amount=None, visible_text="💳 HUMOCARD *1234 Oplata 19.11.2026 12:01"))
+    await bot.send_photo()
+    assert "Summani" in bot.last_text()
+
+
+async def test_photo_while_another_transaction_is_pending_is_not_processed(session_factory):
+    llm = VisionLLM()
+    bot = BotHarness(session_factory, NOW, llm=llm)
+    await bot.send(samples.CARDXABAR_EXPENSE)
+    await bot.send_photo()
+    assert llm.images == []
+    assert "Avval" in bot.last_text()
