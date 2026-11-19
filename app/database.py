@@ -1,4 +1,4 @@
-"""SQLAlchemy ulanishi (async). SQLite va PostgreSQL bilan ishlaydi."""
+"""SQLAlchemy ulanishi (async). Bot PostgreSQL bilan ishlaydi; SQLite faqat testlarda ishlatiladi."""
 
 from __future__ import annotations
 

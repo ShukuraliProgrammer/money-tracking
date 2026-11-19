@@ -33,6 +33,22 @@ jobs:
   test:
     name: Testlar
     runs-on: ubuntu-latest
+    # Bot PostgreSQL bilan ishlaydi, shuning uchun testlar ham PostgreSQL'da o'tadi.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: moneytrack_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/moneytrack_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -89,7 +105,7 @@ jobs:
           # .env va ma'lumotlar serverda qoladi: ular ko'chirilmaydi ham, o'chirilmaydi ham.
           rsync -az --delete \
             --exclude '.git/' --exclude '.github/' --exclude '.venv/' --exclude 'tests/' \
-            --exclude 'data/' --exclude '.env' --exclude '__pycache__/' --exclude '.pytest_cache/' \
+            --exclude '.env' --exclude '__pycache__/' --exclude '.pytest_cache/' \
             ./ "server:$DEPLOY_PATH/"
 
       - name: Botni qayta yig'ib ishga tushirish

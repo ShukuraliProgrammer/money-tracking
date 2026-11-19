@@ -14,7 +14,8 @@ class Settings(BaseSettings):
 
     bot_token: SecretStr
     encryption_key: SecretStr
-    database_url: str = "sqlite+aiosqlite:///./data/moneytrack.db"
+    # Docker compose bu qiymatni o‘zi beradi; lokal ishga tushirishda .env’da yoziladi.
+    database_url: str = "postgresql+asyncpg://moneytrack@localhost:5432/moneytrack"
     redis_url: str | None = None
 
     llm_provider: Literal["anthropic", "openai", "none"] = "none"

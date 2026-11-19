@@ -77,7 +77,8 @@ Kalitni yo‘qotsangiz, saqlangan izohlar va asl xabarlar o‘qilmaydi. Zaxira n
 |---|---|---|
 | `BOT_TOKEN` | — | BotFather tokeni (majburiy) |
 | `ENCRYPTION_KEY` | — | Fernet kaliti (majburiy) |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./data/moneytrack.db` | SQLite yoki `postgresql+asyncpg://…` |
+| `POSTGRES_PASSWORD` | — | Docker compose ichidagi PostgreSQL paroli (majburiy; `openssl rand -hex 24`) |
+| `DATABASE_URL` | compose o‘zi beradi | Faqat Docker’siz ishga tushirganda: `postgresql+asyncpg://…` |
 | `REDIS_URL` | bo‘sh | Berilsa, suhbat holati Redis’da saqlanadi |
 | `LLM_PROVIDER` | `none` | `none`, `anthropic` yoki `openai` |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT` | —, `claude-opus-5-5`, `low` | Claude sozlamalari |
@@ -85,9 +86,33 @@ Kalitni yo‘qotsangiz, saqlangan izohlar va asl xabarlar o‘qilmaydi. Zaxira n
 | `LLM_TIMEOUT_SECONDS`, `LLM_MAX_ATTEMPTS`, `LLM_NOTE_ANALYSIS` | `30`, `3`, `true` | LLM chaqiruvi |
 | `DEFAULT_TIMEZONE`, `DEFAULT_CURRENCY`, `LOG_LEVEL` | `Asia/Tashkent`, `UZS`, `INFO` | Yangi foydalanuvchi uchun standartlar |
 
-### 3a. Lokal ishga tushirish
+### 3a. Docker (tavsiya etiladi)
 
-Python 3.11 yoki yangiroq kerak.
+```bash
+docker compose up -d --build
+```
+
+```bash
+docker compose logs -f bot
+```
+
+Ma’lumotlar shu compose ichidagi PostgreSQL’da, `postgres_data` nomli volume’da saqlanadi. Baza porti tashqariga ochilmaydi.
+
+Zaxira nusxa olish:
+
+```bash
+docker compose exec postgres pg_dump -U moneytrack moneytrack > moneytrack_backup.sql
+```
+
+Redis kerak bo‘lsa (suhbat holati uchun): `.env` ga `REDIS_URL=redis://redis:6379/0` yozing va `docker compose --profile redis up -d --build`.
+
+### 3b. Docker’siz (lokal)
+
+Python 3.11 yoki yangiroq va ishlab turgan PostgreSQL kerak. `.env` ga baza manzilini yozing:
+
+```
+DATABASE_URL=postgresql+asyncpg://moneytrack:PAROL@localhost:5432/moneytrack
+```
 
 ```bash
 python -m venv .venv
@@ -105,22 +130,7 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
-Baza migratsiyalari ishga tushishda avtomatik bajariladi. Qo‘lda bajarish uchun: `alembic upgrade head`.
-
-### 3b. Docker
-
-```bash
-docker compose up -d --build
-```
-
-```bash
-docker compose logs -f bot
-```
-
-SQLite fayli `moneytrack_data` nomli volume’da saqlanadi. Qo‘shimcha servislar:
-
-- **Redis:** `.env` ga `REDIS_URL=redis://redis:6379/0` yozing va `docker compose --profile redis up -d --build`.
-- **PostgreSQL:** `.env` ga `POSTGRES_PASSWORD=…` va `DATABASE_URL=postgresql+asyncpg://moneytrack:…@postgres:5432/moneytrack` yozing, keyin `docker compose --profile postgres up -d --build`. Bot baza tayyor bo‘lguncha qayta ishga tushib turadi.
+Ikkala usulda ham baza migratsiyalari ishga tushishda avtomatik bajariladi. Qo‘lda bajarish uchun: `alembic upgrade head`.
 
 ## Avtomatik hisobotlar
 
@@ -162,7 +172,7 @@ scp deploy/server-setup.sh root@SERVER_IP:/root/
 ssh root@SERVER_IP "bash /root/server-setup.sh '$(cat moneytrack_deploy.pub)'"
 ```
 
-Skript Docker’ni o‘rnatadi (bo‘lmasa), `deploy` foydalanuvchisini va `/opt/moneytrack` papkasini yaratadi, `.env` faylini shifrlash kaliti bilan tayyorlaydi. Oxirida GitHub’ga kiritiladigan qiymatlarni chiqarib beradi.
+Skript Docker’ni o‘rnatadi (bo‘lmasa), `deploy` foydalanuvchisini va `/opt/moneytrack` papkasini yaratadi, `.env` faylini shifrlash kaliti va PostgreSQL paroli bilan tayyorlaydi. Oxirida GitHub’ga kiritiladigan qiymatlarni chiqarib beradi.
 
 **3. Bot tokenini yozing** (serverda):
 
@@ -189,7 +199,7 @@ Deploy bot 20 soniya davomida yiqilmay ishlab turganini tekshiradi; yiqilsa, xat
 Eslatmalar:
 
 - **Bitta nusxa.** Bir token bilan bir vaqtda faqat bitta bot ishlashi mumkin. Serverga o‘tkazgach, kompyuteringizdagi yoki eski joydagi botni to‘xtating (`docker compose down`).
-- **Mavjud ma’lumotlar.** Bot shu serverda boshqa papkada ishlab turgan bo‘lsa, `DEPLOY_PATH` sirini o‘sha papkaga qo‘ying — `.env` va baza joyida qoladi. Boshqa mashinadan ko‘chirayotgan bo‘lsangiz, `moneytrack.db` faylini va eski `ENCRYPTION_KEY`’ni birga olib o‘ting; kalit boshqa bo‘lsa, eski izohlar o‘qilmaydi.
+- **Mavjud ma’lumotlar.** Yangi serverda baza bo‘sh boshlanadi. Boshqa PostgreSQL’dan ko‘chirayotgan bo‘lsangiz, `pg_dump` nusxasini tiklang va eski `ENCRYPTION_KEY`’ni ham olib o‘ting; kalit boshqa bo‘lsa, eski izohlar o‘qilmaydi. Eski SQLite bazasi avtomatik ko‘chirilmaydi.
 - **Xavfsizlik.** Hammasi ishlagach, serverda SSH’ga parol bilan kirishni o‘chirib qo‘yish tavsiya etiladi.
 
 ## Xabar qanday o‘qiladi
@@ -217,7 +227,7 @@ Yangi format qo‘shish: namunani `tests/samples.py` ga, kutilgan natijani `test
 
 - Bot PIN, CVV, SMS kod, parol yoki to‘liq karta raqamini so‘ramaydi; to‘liq raqam yuborilsa rad etadi va xabarni chatdan o‘chirishga urinadi.
 - Kartaning faqat oxirgi 4 ta raqami saqlanadi.
-- `raw_text`, `user_note`, `ai_summary` bazada Fernet (AES) bilan shifrlangan. Summa, joy va oxirgi 4 raqam ochiq turadi, chunki hisobotlar shular bo‘yicha hisoblanadi; baza faylini ham himoyalang.
+- `raw_text`, `user_note`, `ai_summary` bazada Fernet (AES) bilan shifrlangan. Summa, joy va oxirgi 4 raqam ochiq turadi, chunki hisobotlar shular bo‘yicha hisoblanadi; baza va uning zaxira nusxalarini ham himoyalang.
 - Har bir so‘rov `user_id` bo‘yicha filtrlanadi: foydalanuvchi faqat o‘z ma’lumotini ko‘radi. Admin buyruqlari yo‘q.
 - Token va kalitlar faqat `.env` da. Loglarda token, API kalit va karta raqami yashiriladi; xabar matni logga yozilmaydi.
 - Redis ishlatilsa, tugallanmagan suhbat qoralamasi u yerda shifrlanmagan holda, ko‘pi bilan 24 soat turadi.
@@ -267,7 +277,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Testlar haqiqiy dispatcher’ni soxta Telegram sessiyasi bilan ishlatadi (`tests/bot_harness.py`), shuning uchun token ham, internet ham kerak emas. PostgreSQL’da tekshirish:
+Testlar haqiqiy dispatcher’ni soxta Telegram sessiyasi bilan ishlatadi (`tests/bot_harness.py`), shuning uchun token ham, internet ham kerak emas. Lokal holatda ular tezlik uchun xotiradagi vaqtinchalik bazada ishlaydi; GitHub Actions’da PostgreSQL’da o‘tadi. O‘zingizda ham PostgreSQL’da tekshirish:
 
 ```bash
 TEST_DATABASE_URL=postgresql+asyncpg://user:pass@localhost/moneytrack_test pytest

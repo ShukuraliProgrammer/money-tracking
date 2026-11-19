@@ -4,7 +4,7 @@
 # Nima qiladi:
 #   1. Docker o'rnatilmagan bo'lsa, o'rnatadi (o'rnatilgan bo'lsa, tegmaydi).
 #   2. Deploy uchun alohida foydalanuvchi yaratadi va unga SSH ochiq kalitingizni qo'shadi.
-#   3. Bot papkasini va .env faylini yaratadi (shifrlash kaliti bilan).
+#   3. Bot papkasini va .env faylini yaratadi (shifrlash kaliti va PostgreSQL paroli bilan).
 #
 # Ishga tushirish (root sifatida), argument — ochiq kalit (.pub fayl mazmuni):
 #   sudo bash server-setup.sh "ssh-ed25519 AAAA... moneytrack-deploy"
@@ -71,16 +71,17 @@ if [ -f "$ENV_FILE" ]; then
 else
   # Fernet kaliti: 32 tasodifiy bayt, URL-xavfsiz base64.
   ENCRYPTION_KEY="$(openssl rand -base64 32 | tr '+/' '-_')"
+  POSTGRES_PASSWORD="$(openssl rand -hex 24)"
   cat > "$ENV_FILE" <<ENV
 # MoneyTrack UZ sozlamalari. To'liq ro'yxat: .env.example
 BOT_TOKEN=
 ENCRYPTION_KEY=$ENCRYPTION_KEY
-DATABASE_URL=sqlite+aiosqlite:///./data/moneytrack.db
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 LLM_PROVIDER=none
 ENV
   chown "$DEPLOY_USER:$DEPLOY_USER" "$ENV_FILE"
   chmod 600 "$ENV_FILE"
-  echo "    .env yaratildi (shifrlash kaliti bilan)."
+  echo "    .env yaratildi (shifrlash kaliti va PostgreSQL paroli bilan)."
 fi
 
 HOST_KEY="$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub 2> /dev/null || true)"

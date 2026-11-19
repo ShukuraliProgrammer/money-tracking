@@ -1,20 +1,40 @@
-# Oddiy ishga tushirish (SQLite, LLM'siz yoki .env'dagi sozlama bilan):
-#   docker compose up -d --build
-# Redis bilan:        docker compose --profile redis up -d --build      (+ .env: REDIS_URL=redis://redis:6379/0)
-# PostgreSQL bilan:   docker compose --profile postgres up -d --build   (+ .env: DATABASE_URL va POSTGRES_PASSWORD)
+# Ishga tushirish:   docker compose up -d --build
+# Redis bilan:       docker compose --profile redis up -d --build   (+ .env: REDIS_URL=redis://redis:6379/0)
+#
+# .env faylida BOT_TOKEN, ENCRYPTION_KEY va POSTGRES_PASSWORD bo'lishi shart.
 
 services:
   bot:
     build: .
     restart: unless-stopped
     env_file: .env
-    volumes:
-      - moneytrack_data:/app/data
+    environment:
+      # Baza shu compose ichidagi PostgreSQL; manzil paroldan yig'iladi, .env'ga alohida yozish shart emas.
+      DATABASE_URL: postgresql+asyncpg://moneytrack:${POSTGRES_PASSWORD}@postgres:5432/moneytrack
+    depends_on:
+      postgres:
+        condition: service_healthy
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: moneytrack
+      POSTGRES_DB: moneytrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env faylida yozilishi kerak}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moneytrack -d moneytrack"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    # Port tashqariga ochilmaydi: bazaga faqat bot konteyneri ulanadi.
 
   redis:
     image: redis:7-alpine
@@ -24,23 +44,6 @@ services:
     volumes:
       - redis_data:/data
 
-  postgres:
-    image: postgres:16-alpine
-    profiles: ["postgres"]
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: moneytrack
-      POSTGRES_DB: moneytrack
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U moneytrack"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
 volumes:
-  moneytrack_data:
-  redis_data:
   postgres_data:
+  redis_data:

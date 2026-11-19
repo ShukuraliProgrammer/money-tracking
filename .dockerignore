@@ -4,7 +4,6 @@
 .pytest_cache
 __pycache__
 *.pyc
-data
 tests
 README.md
 deploy
