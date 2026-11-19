@@ -1,0 +1,225 @@
+"""Ma’lumotlarni Telegram xabari (HTML) ko‘rinishiga keltirish."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+from html import escape
+from zoneinfo import ZoneInfo
+
+from app.bot import texts
+from app.models import Card, Category, Transaction, User
+from app.schemas import ParsedTransaction
+from app.services.report_service import CurrencyReport, Report, Stats, Totals
+from app.utils.dates import format_dt
+from app.utils.money import format_amount, format_number
+
+MESSAGE_LIMIT = 4000
+_PERIOD_NAMES = {"daily": "har kuni", "weekly": "har hafta", "monthly": "har oy", "yearly": "har yil"}
+
+
+def esc(value: str | None) -> str:
+    return escape(value or "", quote=False)
+
+
+def clip(text: str) -> str:
+    """Telegram xabar uzunligi chegarasidan oshmasligi uchun."""
+    return text if len(text) <= MESSAGE_LIMIT else text[: MESSAGE_LIMIT - 1].rstrip() + "…"
+
+
+def signed(amount: Decimal, positive: bool) -> str:
+    return f"{'+' if positive else '−'}{format_number(amount)}"
+
+
+def card_title(card: Card) -> str:
+    return f"{card.name} ****{card.card_last4}"
+
+
+# --- Tranzaksiya ------------------------------------------------------------- #
+
+
+def draft_summary(draft: ParsedTransaction, tz: ZoneInfo) -> str:
+    income = draft.transaction_type == "income"
+    lines = [
+        texts.HEAD_INCOME if income else texts.HEAD_EXPENSE,
+        f"Summa: {format_amount(draft.amount, draft.currency)}" if draft.amount is not None else "Summa: —",
+        f"{'Kimdan' if income else 'Joy'}: {esc(draft.merchant) or '—'}",
+        f"Karta: ****{draft.card_last4}" if draft.card_last4 else "Karta: —",
+        f"Vaqt: {format_dt(draft.occurred_at, tz)}" if draft.occurred_at else "Vaqt: —",
+    ]
+    return "\n".join(lines)
+
+
+def transaction_line(transaction: Transaction, tz: ZoneInfo) -> str:
+    """Bitta tranzaksiyaning qisqa ko‘rinishi."""
+    income = transaction.transaction_type == "income"
+    icon = "💰" if income else "💸"
+    parts = [f"{icon} {format_amount(transaction.amount, transaction.currency)}"]
+    if transaction.merchant:
+        parts.append(esc(transaction.merchant))
+    return " — ".join(parts) + f" ({format_dt(transaction.occurred_at, tz)})"
+
+
+def saved_summary(transaction: Transaction, tz: ZoneInfo) -> str:
+    income = transaction.transaction_type == "income"
+    head = f"{'💰' if income else '💸'} {format_amount(transaction.amount, transaction.currency)}"
+    if transaction.merchant:
+        head += f" — {esc(transaction.merchant)}"
+    lines = [texts.SAVED_HEAD, head]
+    if transaction.category:
+        lines.append(f"Tur: {transaction.category.emoji} {esc(transaction.category.name)}")
+    if transaction.user_note:
+        lines.append(f"Izoh: {esc(transaction.user_note)}")
+    if transaction.people_count:
+        lines.append(f"Kishi soni: {transaction.people_count}")
+    if transaction.is_recurring and transaction.recurring_period in _PERIOD_NAMES:
+        lines.append(f"Takrorlanadi: {_PERIOD_NAMES[transaction.recurring_period]}")
+    if transaction.tags:
+        lines.append("Teglar: " + ", ".join(f"#{esc(tag)}" for tag in transaction.tags))
+    lines.append(f"Karta: {esc(card_title(transaction.card))}" if transaction.card else f"Karta: {texts.BTN_NO_CARD}")
+    lines.append(f"Vaqt: {format_dt(transaction.occurred_at, tz)}")
+    return "\n".join(lines)
+
+
+# --- Kartalar, turlar, sozlamalar -------------------------------------------- #
+
+
+def cards_list(cards: list[Card]) -> str:
+    if not cards:
+        return texts.CARDS_EMPTY
+    lines = [texts.CARDS_HEAD]
+    for index, card in enumerate(cards, start=1):
+        details = [f"{card.card_network} ****{card.card_last4}", card.currency]
+        if card.bank_name:
+            details.append(esc(card.bank_name))
+        line = f"{index}. {esc(card.name)} — " + " · ".join(details)
+        if not card.is_active:
+            line += f" ({texts.INACTIVE})"
+        lines.append(line)
+    lines += ["", texts.CARDS_HINT]
+    return "\n".join(lines)
+
+
+def categories_list(categories: list[Category]) -> str:
+    lines = [texts.CATEGORIES_HEAD]
+    lines += [f"{category.emoji} {esc(category.name)}" for category in categories]
+    lines += ["", texts.CATEGORIES_HINT]
+    return "\n".join(lines)
+
+
+def settings_text(user: User) -> str:
+    return texts.SETTINGS.format(
+        timezone=esc(user.timezone),
+        currency=esc(user.preferred_currency),
+        notifications=texts.ON if user.notifications_enabled else texts.OFF,
+    )
+
+
+# --- Hisobot -------------------------------------------------------------------- #
+
+
+def _flow(totals: Totals) -> str:
+    parts = []
+    if totals.income:
+        parts.append(signed(totals.income, True))
+    if totals.expense:
+        parts.append(signed(totals.expense, False))
+    return " / ".join(parts) or "0"
+
+
+def _currency_block(report: CurrencyReport, tz: ZoneInfo) -> list[str]:
+    currency, totals = report.currency, report.totals
+    lines = [
+        f"<b>{currency}</b>",
+        f"💰 Kirim: {format_amount(totals.income, currency)}",
+        f"💸 Chiqim: {format_amount(totals.expense, currency)}",
+        f"⚖️ Farq: {signed(abs(totals.net), totals.net >= 0)} {currency}",
+        "",
+        "💳 <b>Kartalar bo‘yicha:</b>",
+    ]
+    lines += [f"• {esc(item.label)}: {_flow(item.totals)}" for item in report.by_card]
+    lines += ["", "🏷 <b>Turlar bo‘yicha:</b>"]
+    lines += [f"• {esc(item.label)}: {_flow(item.totals)} ({item.totals.count} ta)" for item in report.by_category[:15]]
+    if report.top_expenses:
+        lines += ["", "🔝 <b>Eng katta xarajatlar:</b>"]
+        for index, transaction in enumerate(report.top_expenses, start=1):
+            what = esc(transaction.merchant or transaction.user_note or "—")[:60]
+            day = transaction.occurred_at.astimezone(tz).strftime("%d.%m")
+            lines.append(f"{index}. {format_amount(transaction.amount, currency)} — {what} ({day})")
+    if report.top_merchants:
+        lines += ["", "🏪 <b>Eng ko‘p ishlatilgan joylar:</b>"]
+        lines += [
+            f"• {esc(stat.merchant)} — {stat.count} marta, {format_amount(stat.expense, currency)}"
+            for stat in report.top_merchants
+        ]
+    return lines
+
+
+def report_text(title: str, filter_line: str, report: Report, tz: ZoneInfo) -> str:
+    lines = [f"📊 <b>{esc(title)}</b>", esc(filter_line), ""]
+    if report.count == 0:
+        lines.append(texts.REPORT_EMPTY)
+        return "\n".join(lines)
+    for currency_report in report.currencies:
+        lines += _currency_block(currency_report, tz)
+        lines.append("")
+    return clip("\n".join(lines).rstrip())
+
+
+def transactions_page(
+    title: str, filter_line: str, transactions: list[Transaction], page: int, pages: int, tz: ZoneInfo
+) -> str:
+    lines = [f"🧾 <b>{esc(title)}</b> — tranzaksiyalar ({page}/{pages})", esc(filter_line), ""]
+    for transaction in transactions:
+        income = transaction.transaction_type == "income"
+        when = transaction.occurred_at.astimezone(tz).strftime("%d.%m %H:%M")
+        amount = f"{signed(transaction.amount, income)} {transaction.currency}"
+        lines.append(f"{when} · {'💰' if income else '💸'} <b>{amount}</b>")
+        details = []
+        if transaction.category:
+            details.append(f"{transaction.category.emoji} {esc(transaction.category.name)}")
+        if transaction.merchant:
+            details.append(esc(transaction.merchant))
+        details.append(f"****{transaction.card.card_last4}" if transaction.card else texts.BTN_NO_CARD)
+        lines.append(" · ".join(details))
+        if transaction.user_note:
+            note = transaction.user_note if len(transaction.user_note) <= 160 else transaction.user_note[:159] + "…"
+            lines.append(f"📝 {esc(note)}")
+        lines.append("")
+    return clip("\n".join(lines).rstrip())
+
+
+def _bar(share: float) -> str:
+    return "▇" * max(1, round(share * 10))
+
+
+def stats_text(stats: Stats) -> str:
+    lines = [f"📈 <b>Statistika</b> — {texts.BTN_LAST_30}", ""]
+    if stats.report.count == 0:
+        lines += [texts.REPORT_EMPTY, ""]
+    for report in stats.report.currencies:
+        currency, totals = report.currency, report.totals
+        lines.append(f"<b>{currency}</b>: 💰 {signed(totals.income, True)} · 💸 {signed(totals.expense, False)}")
+        spending = [item for item in report.by_category if item.totals.expense > 0]
+        if spending:
+            lines.append("🏷 Turlar bo‘yicha (chiqim):")
+            for item in spending[:10]:
+                share = float(item.totals.expense / totals.expense)
+                lines.append(
+                    f"• {esc(item.label)} — {format_number(item.totals.expense)} ({share:.0%}) {_bar(share)}"
+                )
+        if report.top_merchants:
+            lines.append("🏪 Joylar bo‘yicha:")
+            lines += [
+                f"• {esc(stat.merchant)} — {stat.count} marta, {format_number(stat.expense)}"
+                for stat in report.top_merchants
+            ]
+        lines.append("")
+
+    lines.append("📅 <b>Oylik trend:</b>")
+    for month in stats.trend:
+        if not month.totals:
+            lines.append(f"{month.label}: —")
+            continue
+        flows = [f"{_flow(totals)} {currency}" for currency, totals in sorted(month.totals.items())]
+        lines.append(f"{month.label}: " + "; ".join(flows))
+    return clip("\n".join(lines))

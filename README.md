@@ -1,0 +1,198 @@
+# MoneyTrack UZ
+
+Debit kartalardagi kirim va chiqimlarni kuzatadigan Telegram bot. Karta xabarini botga tashlaysiz, bot uchta savol beradi va oy oxirida hamma kartalar bo‘yicha hisobot chiqaradi.
+
+```
+Siz:  💸 Oplata
+      ➖ 54.000,00 UZS
+      📍 YANDEX GO
+      💳 HUMOCARD *1234
+      🕓 12:01 19.11.2026
+
+Bot:  💸 Chiqim aniqlandi:
+      Summa: 54 000 UZS · Joy: YANDEX GO · Karta: ****1234 · Vaqt: 19.11.2026 12:01
+      Nima uchun qilindi?                         [Tahrirlash] [Bekor qilish]
+Siz:  Taksi — uyga qaytish
+Bot:  Qaysi turga kiradi?    [P2P] [Ovqatlanish] [Narsa sotib olish] … [+ Yangi tur]
+Bot:  Qaysi kartadan qilindi?   [✓ Asosiy Humo ****1234] [+ Yangi karta] [Kartasiz]
+Bot:  ✅ Saqlandi
+```
+
+## Imkoniyatlar
+
+- **Kiritish:** CardXabarBot va HUMOcardbot xabarlari, bank SMS’i (lotin/kirill), oddiy matn («Kamolonda 250 ming so‘m ovqatlandik»), `/add`.
+- **Uch savol:** nima uchun qilindi (izoh), qaysi turga kiradi, qaysi kartadan.
+- **Hisobot:** `/report` — davr → karta → tur bo‘yicha filtr; yig‘indilar, kartalar va turlar bo‘yicha taqsimot, eng katta xarajatlar, har bir tranzaksiya izohi bilan ro‘yxat, CSV.
+- **Oylik avtomatik hisobot:** har oyning 1-kuni soat 09:00 dan keyin o‘tgan oy hisoboti keladi (`/settings` da o‘chiriladi).
+- **O‘rganish:** bir joy uchun tanlangan tur keyingi safar ⭐ bilan taklif qilinadi.
+- **Kartalar va turlar:** bir nechta karta, o‘z turlaringiz.
+- **Maxfiylik:** to‘liq karta raqami saqlanmaydi, izoh va asl xabar shifrlanadi, `/settings` orqali hamma ma’lumotni o‘chirish mumkin.
+
+Bot boshqa botlarning xabarlarini o‘zi o‘qimaydi: faqat siz forward qilgan yoki nusxalab yuborgan matn bilan ishlaydi.
+
+## Buyruqlar
+
+| Buyruq | Vazifasi |
+|---|---|
+| `/start` | Botni tanishtirish, profil yaratish |
+| `/add` | Qo‘lda tranzaksiya qo‘shish |
+| `/cards`, `/addcard` | Kartalar ro‘yxati, yangi karta |
+| `/report` | Hisobot (bugun, hafta, oy, o‘tgan oylar; karta va tur filtri) |
+| `/stat` | Oxirgi 30 kun va 6 oylik trend |
+| `/categories` | Turlar (qo‘shish, o‘chirish) |
+| `/export` | CSV fayl |
+| `/delete` | Oxirgi tranzaksiyani o‘chirish |
+| `/settings` | Vaqt zonasi, valyuta, oylik hisobot, ma’lumotlarni o‘chirish |
+| `/cancel`, `/help` | Joriy amalni bekor qilish, yordam |
+
+## Ishga tushirish
+
+### 1. BotFather
+
+1. Telegram’da [@BotFather](https://t.me/BotFather) ga yozing: `/newbot`.
+2. Bot nomi (masalan `MoneyTrack UZ`) va username (masalan `my_moneytrack_bot`) bering.
+3. BotFather bergan tokenni `.env` faylidagi `BOT_TOKEN` ga yozing.
+4. Buyruqlar ro‘yxati bot ishga tushganda avtomatik o‘rnatiladi. Xohlasangiz `/setdescription` bilan tavsif qo‘shing.
+
+Bot faqat shaxsiy chatda ishlaydi, guruhlarda javob bermaydi.
+
+### 2. Sozlamalar
+
+```bash
+cp .env.example .env
+```
+
+Shifrlash kalitini yarating va `.env` dagi `ENCRYPTION_KEY` ga yozing:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Kalitni yo‘qotsangiz, saqlangan izohlar va asl xabarlar o‘qilmaydi. Zaxira nusxasini alohida saqlang.
+
+| O‘zgaruvchi | Standart | Izoh |
+|---|---|---|
+| `BOT_TOKEN` | — | BotFather tokeni (majburiy) |
+| `ENCRYPTION_KEY` | — | Fernet kaliti (majburiy) |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/moneytrack.db` | SQLite yoki `postgresql+asyncpg://…` |
+| `REDIS_URL` | bo‘sh | Berilsa, suhbat holati Redis’da saqlanadi |
+| `LLM_PROVIDER` | `none` | `none`, `anthropic` yoki `openai` |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT` | —, `claude-opus-5-5`, `low` | Claude sozlamalari |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | —, `gpt-5-mini` | OpenAI sozlamalari |
+| `LLM_TIMEOUT_SECONDS`, `LLM_MAX_ATTEMPTS`, `LLM_NOTE_ANALYSIS` | `30`, `3`, `true` | LLM chaqiruvi |
+| `DEFAULT_TIMEZONE`, `DEFAULT_CURRENCY`, `LOG_LEVEL` | `Asia/Tashkent`, `UZS`, `INFO` | Yangi foydalanuvchi uchun standartlar |
+
+### 3a. Lokal ishga tushirish
+
+Python 3.11 yoki yangiroq kerak.
+
+```bash
+python -m venv .venv
+```
+
+```bash
+source .venv/bin/activate
+```
+
+```bash
+pip install -r requirements.txt
+```
+
+```bash
+python -m app.main
+```
+
+Baza migratsiyalari ishga tushishda avtomatik bajariladi. Qo‘lda bajarish uchun: `alembic upgrade head`.
+
+### 3b. Docker
+
+```bash
+docker compose up -d --build
+```
+
+```bash
+docker compose logs -f bot
+```
+
+SQLite fayli `moneytrack_data` nomli volume’da saqlanadi. Qo‘shimcha servislar:
+
+- **Redis:** `.env` ga `REDIS_URL=redis://redis:6379/0` yozing va `docker compose --profile redis up -d --build`.
+- **PostgreSQL:** `.env` ga `POSTGRES_PASSWORD=…` va `DATABASE_URL=postgresql+asyncpg://moneytrack:…@postgres:5432/moneytrack` yozing, keyin `docker compose --profile postgres up -d --build`. Bot baza tayyor bo‘lguncha qayta ishga tushib turadi.
+
+## Xabar qanday o‘qiladi
+
+1. **Tozalash.** 13–19 xonali karta raqamlari `****1234` ko‘rinishiga keltiriladi. SMS kod, parol, PIN yoki CVV ga o‘xshash xabar umuman qayta ishlanmaydi.
+2. **Qoidalar (regex).** `app/services/parser.py` summa, valyuta, kirim/chiqim, joy, karta, sana va manbani ajratadi. CardXabar, HUMO va bank SMS shu bosqichda, LLM’siz o‘qiladi. Balans («💰», «Qoldiq», «Dostupno») summa deb olinmaydi.
+3. **LLM (ixtiyoriy zaxira).** Qoidalar yetarli bo‘lmasa (odatda erkin matn) va `LLM_PROVIDER` sozlangan bo‘lsa, yashirilgan matn LLM’ga yuboriladi. LLM qaytargan karta raqami yoki sana matnda bo‘lmasa, qabul qilinmaydi.
+4. **So‘rash.** Summa, kirim/chiqim yoki sana aniqlanmasa, bot so‘raydi. Matnda sana bo‘lmasa-yu, xabar forward qilingan bo‘lsa, asl xabar vaqti olinadi; joriy vaqt o‘zidan-o‘zi qo‘yilmaydi.
+
+Yangi format qo‘shish: namunani `tests/samples.py` ga, kutilgan natijani `tests/test_parser.py` ga yozing, keyin `parser.py` dagi kalit so‘zlarni to‘ldiring.
+
+> Parser qoidalari CardXabar va HUMO xabarlarining ma’lum ko‘rinishlari asosida yozilgan, haqiqiy xabarlar to‘plamida tekshirilmagan. Bot biror xabarni noto‘g‘ri o‘qisa, o‘sha xabarni (raqamlarini yashirib) namuna sifatida qo‘shing.
+
+### LLM
+
+- Promptlar: `app/services/llm.py` (`PARSE_SYSTEM_PROMPT`, `NOTE_SYSTEM_PROMPT`).
+- Javob JSON sxema bo‘yicha so‘raladi; noto‘g‘ri JSON kelsa `LLM_MAX_ATTEMPTS` martagacha qayta so‘raladi, bo‘lmasa qoidalar natijasi ishlatiladi.
+- Anthropic uchun standart model `claude-opus-5-5`, `effort=low`. Arzonroq variant kerak bo‘lsa `ANTHROPIC_MODEL=claude-haiku-5-5` qiling. Opus/Sonnet/Fable modellarida rad etilgan so‘rov server tomonda zaxira modelga o‘tadi (`fallbacks="default"`).
+- LLM’ga tranzaksiya matni va izoh yuboriladi. Buni istamasangiz `LLM_PROVIDER=none` qoldiring: bot to‘liq ishlaydi, faqat erkin matnda ko‘proq savol beradi.
+
+## Xavfsizlik
+
+- Bot PIN, CVV, SMS kod, parol yoki to‘liq karta raqamini so‘ramaydi; to‘liq raqam yuborilsa rad etadi va xabarni chatdan o‘chirishga urinadi.
+- Kartaning faqat oxirgi 4 ta raqami saqlanadi.
+- `raw_text`, `user_note`, `ai_summary` bazada Fernet (AES) bilan shifrlangan. Summa, joy va oxirgi 4 raqam ochiq turadi, chunki hisobotlar shular bo‘yicha hisoblanadi; baza faylini ham himoyalang.
+- Har bir so‘rov `user_id` bo‘yicha filtrlanadi: foydalanuvchi faqat o‘z ma’lumotini ko‘radi. Admin buyruqlari yo‘q.
+- Token va kalitlar faqat `.env` da. Loglarda token, API kalit va karta raqami yashiriladi; xabar matni logga yozilmaydi.
+- Redis ishlatilsa, tugallanmagan suhbat qoralamasi u yerda shifrlanmagan holda, ko‘pi bilan 24 soat turadi.
+- `/settings` → «Ma’lumotlarimni o‘chirish» foydalanuvchining hamma yozuvlarini butunlay o‘chiradi.
+
+## Loyiha tuzilmasi
+
+```
+app/
+├── main.py                 ishga tushirish, migratsiya, polling
+├── config.py               .env sozlamalari
+├── database.py             SQLAlchemy async ulanish
+├── models.py               users, cards, categories, transactions, merchant_rules
+├── schemas.py              parser va LLM natijalari (Pydantic)
+├── bot/
+│   ├── dispatcher.py       middleware, routerlar, xatolarni ushlash
+│   ├── middlewares.py      har bir yangilanish uchun sessiya va profil
+│   ├── scheduler.py        oylik avtomatik hisobot
+│   ├── states.py           suhbat holatlari
+│   ├── keyboards.py        inline tugmalar
+│   ├── render.py           xabar ko‘rinishlari
+│   ├── texts.py            o‘zbekcha matnlar
+│   └── handlers/           start, transactions, cards, reports, settings
+├── services/
+│   ├── parser.py           qoidalar + LLM zaxirasi
+│   ├── llm.py              promptlar, Anthropic/OpenAI mijozlari
+│   ├── notes.py            izoh tahlili (kishi soni, takrorlanish, tur taklifi)
+│   ├── transaction_service.py
+│   ├── report_service.py
+│   └── export_service.py
+└── utils/                  money, dates, validators, crypto, logging
+migrations/                 Alembic
+tests/                      pytest
+```
+
+## Testlar
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+```bash
+pytest
+```
+
+Testlar haqiqiy dispatcher’ni soxta Telegram sessiyasi bilan ishlatadi (`tests/bot_harness.py`), shuning uchun token ham, internet ham kerak emas. PostgreSQL’da tekshirish:
+
+```bash
+TEST_DATABASE_URL=postgresql+asyncpg://user:pass@localhost/moneytrack_test pytest
+```
+
+## Keyingi versiyalar uchun
+
+Screenshot OCR, bank API integratsiyasi, real-time bank webhook, obuna to‘lovi, ko‘p foydalanuvchili analitika, Excel (`.xlsx`) eksport va boshqa interfeys tillari hozircha yo‘q.

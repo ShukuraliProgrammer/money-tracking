@@ -1,0 +1,46 @@
+# Oddiy ishga tushirish (SQLite, LLM'siz yoki .env'dagi sozlama bilan):
+#   docker compose up -d --build
+# Redis bilan:        docker compose --profile redis up -d --build      (+ .env: REDIS_URL=redis://redis:6379/0)
+# PostgreSQL bilan:   docker compose --profile postgres up -d --build   (+ .env: DATABASE_URL va POSTGRES_PASSWORD)
+
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - moneytrack_data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: moneytrack
+      POSTGRES_DB: moneytrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moneytrack"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  moneytrack_data:
+  redis_data:
+  postgres_data:

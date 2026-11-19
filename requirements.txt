@@ -1,0 +1,12 @@
+aiogram>=3.13,<4
+SQLAlchemy[asyncio]>=2.0.30,<3
+aiosqlite>=0.20
+asyncpg>=0.29
+alembic>=1.13
+pydantic>=2.7,<3
+pydantic-settings>=2.3
+cryptography>=42
+anthropic>=2.10,<3
+openai>=1.50
+redis>=5
+tzdata
