@@ -164,7 +164,7 @@ class RuleBasedParser:
                 raw = receiver.group(1)
         if raw is None:
             return None
-        cleaned = re.sub(r"\s+", " ", raw).strip(" .,;:-")
+        cleaned = re.sub(r"\s+", " ", raw).strip(" .,;:->")
         return cleaned[:64] or None
 
     @staticmethod

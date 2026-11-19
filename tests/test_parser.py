@@ -306,3 +306,30 @@ async def test_screenshot_without_llm_is_not_supported():
 async def test_screenshot_llm_failure_is_reported():
     with pytest.raises(LLMError):
         await TransactionParser(FakeVisionLLM(error=LLMError("down"))).parse_screenshot(IMAGE, TZ, NOW)
+
+
+# --- Haqiqiy bot xabarlari formati ----------------------------------------------------- #
+
+
+def test_real_cardxabar_ecom_payment():
+    parsed = rule_parse(samples.REAL_CARDXABAR_ECOM)
+    assert parsed.transaction_type == "expense"
+    assert parsed.amount == Decimal("32520")
+    assert parsed.currency == "UZS"
+    assert parsed.merchant == "PAYME OPLATA, UZ"
+    assert parsed.card_last4 == "4417"
+    assert parsed.occurred_at == datetime(2026, 11, 18, 19, 19, tzinfo=TZ)
+    assert parsed.source == "cardxabar"
+    assert parsed.missing_fields == []
+
+
+def test_real_humo_top_up():
+    parsed = rule_parse(samples.REAL_HUMO_TOPUP)
+    assert parsed.transaction_type == "income"
+    assert parsed.amount == Decimal("1000")
+    assert parsed.merchant == "UB Visa to Humo P2P"  # oxiridagi «>» belgisi olib tashlanadi
+    assert parsed.card_last4 == "7731"
+    assert parsed.card_network == "Humo"
+    assert parsed.occurred_at == datetime(2026, 11, 19, 10, 28, tzinfo=TZ)
+    assert parsed.source == "humo"
+    assert parsed.missing_fields == []

@@ -78,12 +78,16 @@ async def test_bot_ignores_group_chats(bot):
 async def test_pasted_notification_is_summarized_and_asks_why(bot):
     await bot.send(samples.HUMO_EXPENSE)
     reply = bot.last_text()
-    assert "Chiqim aniqlandi" in reply
-    assert "54 000 UZS" in reply
-    assert "YANDEX GO" in reply
-    assert "****1234" in reply
-    assert "19.11.2026 12:01" in reply
-    assert "Nima uchun qilindi?" in reply
+    # Karta botlaridagi kabi: har qator emoji bilan boshlanadi, ortiqcha so'z yo'q.
+    assert reply.splitlines() == [
+        "💸 <b>Chiqim</b>",
+        "➖ <b>54 000 UZS</b>",
+        "📍 YANDEX GO",
+        "💳 ****1234",
+        "🕓 19.11.2026 12:01",
+        "",
+        "📝 Nima uchun qilindi?",
+    ]
     assert any("Tahrirlash" in b for b in bot.buttons())
     assert any("Bekor qilish" in b for b in bot.buttons())
 
@@ -115,7 +119,7 @@ async def test_card_is_asked_when_message_card_is_unknown(bot, session_factory):
     await bot.send(samples.HUMO_EXPENSE)
     await bot.send("Taksi")
     await bot.click("P2P")
-    assert bot.last_text() == "Qaysi kartadan qilindi?"
+    assert bot.last_text() == "💳 Qaysi kartadan qilindi?"
     assert any("Uzcard ish ****5678" in b for b in bot.buttons())
     assert any("Yangi karta" in b for b in bot.buttons())
 
@@ -158,7 +162,7 @@ async def test_full_flow_saves_transaction_with_label_type_and_card(bot, session
 
 async def test_income_message_uses_income_wording(bot):
     await bot.send(samples.HUMO_INCOME)
-    assert "Kirim aniqlandi" in bot.last_text()
+    assert bot.last_text().splitlines()[:3] == ["💰 <b>Kirim</b>", "➕ <b>1 000 000 UZS</b>", "👤 P2P HUMO UZCARD"]
     await bot.send("Akam qarzini qaytardi")
     await bot.click("P2P")
     assert "Qaysi kartaga" in bot.last_text()
@@ -315,7 +319,7 @@ async def test_edit_flips_type(bot):
     await bot.send(samples.HUMO_EXPENSE)
     await bot.click("Tahrirlash")
     await bot.click("Kirim")
-    assert "Kirim aniqlandi" in bot.last_text()
+    assert "<b>Kirim</b>" in bot.last_text()
 
 
 async def test_edit_merchant(bot):
@@ -385,7 +389,7 @@ async def test_note_keywords_suggest_category(bot):
     await bot.send("Do'stimga qarz berdim")
     starred = [b for b in bot.buttons() if "⭐" in b]
     assert len(starred) == 1 and "Qarz berish" in starred[0]
-    assert bot.last_text() == "Qaysi turga kiradi?"  # ⭐ belgisi uchun alohida izoh yo'q
+    assert bot.last_text() == "🏷 Qaysi turga kiradi?"  # ⭐ belgisi uchun alohida izoh yo'q
 
 
 # --- Xavfsizlik ---------------------------------------------------------------- #
@@ -588,7 +592,7 @@ async def test_declining_saved_pair_continues_as_a_normal_transaction(bot, sessi
     await save_humo_expense(bot, note="Akamga", text=samples.TRANSFER_OUT)
     await bot.send(samples.TRANSFER_IN)
     await bot.click("Yo‘q")
-    assert "Kirim aniqlandi" in bot.last_text() and "Nima uchun qilindi?" in bot.last_text()
+    assert "<b>Kirim</b>" in bot.last_text() and "Nima uchun qilindi?" in bot.last_text()
     await bot.send("Do‘stim qaytardi")
     await bot.click("P2P")
     await bot.click("Kartasiz")
@@ -659,7 +663,7 @@ async def test_screenshot_goes_through_the_same_three_questions(session_factory)
     await bot.send_photo()
     assert len(llm.images) == 1 and llm.images[0].data  # rasm yuklab olinib AI'ga berildi
     reply = bot.last_text()
-    assert "Chiqim aniqlandi" in reply and "54 000 UZS" in reply and "YANDEX GO" in reply
+    assert "<b>Chiqim</b>" in reply and "54 000 UZS" in reply and "YANDEX GO" in reply
     assert "Nima uchun qilindi?" in reply
     await bot.send("Taksi")
     await bot.click("P2P")
@@ -714,9 +718,8 @@ async def test_photo_while_another_transaction_is_pending_is_not_processed(sessi
 async def test_summary_shows_only_known_fields(bot):
     await bot.send("Kamolonda xarid 250 ming 19.11.2026 10:15")
     summary = bot.last_text()
-    assert "Summa:" in summary and "Vaqt:" in summary
-    assert "—" not in summary  # aniqlanmagan joy va karta uchun bo'sh qator chiqmaydi
-    assert "Joy:" not in summary and "Karta:" not in summary
+    assert summary.splitlines()[:3] == ["💸 <b>Chiqim</b>", "➖ <b>250 000 UZS</b>", "🕓 19.11.2026 10:15"]
+    assert "📍" not in summary and "💳" not in summary  # aniqlanmagan joy va karta uchun qator chiqmaydi
 
 
 async def test_image_file_in_another_format_is_converted_before_reading(session_factory):

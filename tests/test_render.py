@@ -22,7 +22,7 @@ def make_tx(tx_id=1, kind="expense", amount="250000", merchant="KAMOLON", card=T
 
 
 def test_draft_summary_makes_amount_bold():
-    assert "Summa: <b>250 000 UZS</b>" in render.draft_summary(make_parsed(), TZ)
+    assert "➖ <b>250 000 UZS</b>" in render.draft_summary(make_parsed(), TZ)
 
 
 def test_saved_summary_makes_amount_bold():
@@ -67,7 +67,7 @@ def test_report_without_filter_has_no_filter_line():
 
 def test_labels_and_merchants_stay_regular_weight():
     text = render.draft_summary(make_parsed(), TZ)
-    assert "Joy: KAMOLON" in text
+    assert "📍 KAMOLON" in text
     assert "<b>KAMOLON" not in text
 
 

@@ -439,3 +439,9 @@ async def test_card_list_has_a_blank_line_after_its_heading(bot):
     await bot.send("/cards")
     head, items = bot.last_text().split("\n\n")
     assert head == "💳 <b>Kartalaringiz:</b>" and len(items.splitlines()) == 2
+
+
+async def test_transaction_list_lines_are_emoji_led(seeded):
+    await seeded.send("/report")
+    await seeded.click("Tranzaksiyalar")
+    assert "🍽 Ovqatlanish · 📍 KAMOLON OSH MARKAZI · 💳 ****5678" in seeded.last_text()

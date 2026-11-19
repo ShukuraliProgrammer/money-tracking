@@ -43,3 +43,18 @@ TRANSFER_IN = """🎉 Popolnenie
 💳 HUMOCARD *5678
 🕓 12:02 19.11.2026
 💰 1.526.871,58 UZS"""
+
+# Haqiqiy botlardagi format (foydalanuvchi yuborgan screenshot'lar asosida; raqamlar o'zgartirilgan).
+REAL_CARDXABAR_ECOM = """🔴 E-Com oplata
+➖ 32 520.00 UZS
+💳 ***4417
+📍 PAYME OPLATA, UZ
+🕓 18.11.26 19:19
+💵 139 076.28 UZS"""
+
+REAL_HUMO_TOPUP = """🎉 To'ldirish
+➕ 1.000,00 UZS
+📍 UB Visa to Humo P2P>
+💳 HUMOCARD *7731
+🕓 10:28 19.11.2026
+💰 1.092,00 UZS"""

@@ -47,17 +47,17 @@ def card_title(card: Card) -> str:
 
 
 def draft_summary(draft: ParsedTransaction, tz: ZoneInfo) -> str:
-    """Aniqlangan maydonlar. Aniqlanmagan joy yoki karta uchun bo‘sh qator chiqarilmaydi."""
+    """Karta botlaridagi kabi: har qator emoji bilan boshlanadi. Aniqlanmagan maydon uchun qator chiqmaydi."""
     income = draft.transaction_type == "income"
     lines = [texts.HEAD_INCOME if income else texts.HEAD_EXPENSE]
     if draft.amount is not None:
-        lines.append(f"Summa: {money(draft.amount, draft.currency)}")
+        lines.append(f"{'➕' if income else '➖'} {money(draft.amount, draft.currency)}")
     if draft.merchant:
-        lines.append(f"{'Kimdan' if income else 'Joy'}: {esc(draft.merchant)}")
+        lines.append(f"{'👤' if income else '📍'} {esc(draft.merchant)}")
     if draft.card_last4:
-        lines.append(f"Karta: ****{draft.card_last4}")
+        lines.append(f"💳 ****{draft.card_last4}")
     if draft.occurred_at:
-        lines.append(f"Vaqt: {format_dt(draft.occurred_at, tz)}")
+        lines.append(f"🕓 {format_dt(draft.occurred_at, tz)}")
     return "\n".join(lines)
 
 
@@ -80,7 +80,7 @@ def saved_summary(transaction: Transaction) -> str:
     details = []
     if transaction.category:
         details.append(f"{transaction.category.emoji} {esc(transaction.category.name)}")
-    details.append(esc(card_title(transaction.card)) if transaction.card else texts.BTN_NO_CARD)
+    details.append(f"💳 {esc(card_title(transaction.card)) if transaction.card else texts.BTN_NO_CARD}")
     return f"{head}\n{' · '.join(details)}"
 
 
@@ -209,8 +209,8 @@ def _transaction_block(transaction: Transaction, tz: ZoneInfo, time_format: str)
     if transaction.category:
         details.append(f"{transaction.category.emoji} {esc(transaction.category.name)}")
     if transaction.merchant:
-        details.append(esc(transaction.merchant))
-    details.append(f"****{transaction.card.card_last4}" if transaction.card else texts.BTN_NO_CARD)
+        details.append(f"📍 {esc(transaction.merchant)}")
+    details.append(f"💳 ****{transaction.card.card_last4}" if transaction.card else f"💳 {texts.BTN_NO_CARD}")
     lines.append(" · ".join(details))
     if transaction.user_note:
         note = transaction.user_note if len(transaction.user_note) <= 160 else transaction.user_note[:159] + "…"
