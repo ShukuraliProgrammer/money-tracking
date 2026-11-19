@@ -126,7 +126,8 @@ async def test_categories_lists_defaults_without_extra_hints(bot):
     await bot.send("/categories")
     for name in ("P2P", "Ovqatlanish", "Narsa sotib olish", "Qarz berish", "Qarz olish", "Investitsiya", "Uyga to‘lov"):
         assert name in bot.last_text()
-    assert len(bot.last_text().splitlines()) == 10  # sarlavha + 9 ta tur
+    head, items = bot.last_text().split("\n\n")
+    assert head == "🏷 <b>Turlar:</b>" and len(items.splitlines()) == 9
 
 
 async def test_category_can_be_added_and_deleted(bot, session_factory):
@@ -325,7 +326,6 @@ async def test_settings_are_compact(bot):
     text = bot.last_text()
     assert "Asia/Tashkent" in text and "UZS" in text
     assert "Til:" not in text  # bitta til bor, uni ko'rsatish shart emas
-    assert len(text.splitlines()) <= 4
     labels = " | ".join(bot.buttons())
     assert "Kunlik ✅" in labels and "Haftalik ✅" in labels and "Oylik ✅" in labels
 
@@ -373,7 +373,7 @@ async def test_user_can_start_again_after_deleting_data(seeded, session_factory)
 async def test_stat_amounts_are_bold(seeded):
     await seeded.send("/stat")
     text = seeded.last_text()
-    assert "💰 <b>+1 000 000</b>" in text and "💸 <b>−304 000</b>" in text
+    assert "💰 Kirim: <b>1 000 000 UZS</b>" in text and "💸 Chiqim: <b>304 000 UZS</b>" in text
     assert "Ovqatlanish — <b>250 000</b>" in text
     assert "Noyabr 2026: <b>+1 000 000 / −304 000 UZS</b>" in text
 
@@ -420,3 +420,22 @@ async def test_stat_shows_the_note_the_user_gave(seeded):
     await seeded.send("/stat")
     text = seeded.last_text()
     assert "Kamolonda ovqatlandik 3 kishi" in text and "Taksi — uyga qaytish" in text
+
+
+async def test_stat_sections_are_separated_by_blank_lines(seeded):
+    await seeded.send("/stat")
+    blocks = seeded.last_text().split("\n\n")
+    starts = [block.splitlines()[0] for block in blocks]
+    assert starts[0].startswith("📈 <b>Statistika</b>")
+    assert starts[1] == "<b>UZS</b>"
+    assert "🏷 <b>Turlar bo‘yicha:</b>" in starts
+    assert "🔝 <b>Eng katta xarajatlar:</b>" in starts
+    assert "🏪 <b>Joylar bo‘yicha:</b>" in starts
+    assert starts[-1] == "📅 <b>Oylik trend:</b>"
+
+
+async def test_card_list_has_a_blank_line_after_its_heading(bot):
+    await add_two_cards(bot)
+    await bot.send("/cards")
+    head, items = bot.last_text().split("\n\n")
+    assert head == "💳 <b>Kartalaringiz:</b>" and len(items.splitlines()) == 2

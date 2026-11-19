@@ -95,7 +95,8 @@ def test_top_expenses_fall_back_to_merchant_without_a_note():
 def test_long_note_is_shortened_in_top_expenses():
     tx = payme_tx()
     tx.user_note = "x" * 200
-    line = next(l for l in render.report_text("N", "", summarize([tx]), TZ).splitlines() if l.startswith("1."))
+    lines = render.report_text("N", "", summarize([tx]), TZ).splitlines()
+    line = next(item for item in lines if item.startswith("1."))
     assert "x" * 59 + "…" in line and "x" * 61 not in line
 
 
@@ -106,4 +107,5 @@ def test_stats_list_largest_expenses_with_the_users_note():
     text = render.stats_text(stats, TZ)
     assert "Eng katta xarajatlar" in text
     assert "1. <b>32 520</b> — Karzinkadan xarid: non,qatiq,kofe (19.11)" in text
+    assert "💸 Chiqim: <b>41 520 UZS</b>" in text
     assert "2. <b>9 000</b> — Tushlik (19.11)" in text

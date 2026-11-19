@@ -99,7 +99,7 @@ def transfer_route(sent: Leg, received: Leg) -> str:
 def cards_list(cards: list[Card]) -> str:
     if not cards:
         return texts.CARDS_EMPTY
-    lines = [texts.CARDS_HEAD]
+    lines = [texts.CARDS_HEAD, ""]
     for index, card in enumerate(cards, start=1):
         details = [f"{card.card_network} ****{card.card_last4}", card.currency]
         if card.bank_name:
@@ -112,7 +112,8 @@ def cards_list(cards: list[Card]) -> str:
 
 
 def categories_list(categories: list[Category]) -> str:
-    return "\n".join([texts.CATEGORIES_HEAD, *(f"{category.emoji} {esc(category.name)}" for category in categories)])
+    items = [f"{category.emoji} {esc(category.name)}" for category in categories]
+    return "\n".join([texts.CATEGORIES_HEAD, "", *items])
 
 
 def settings_text(user: User) -> str:
@@ -237,41 +238,55 @@ def _bar(share: float) -> str:
 
 
 def stats_text(stats: Stats, tz: ZoneInfo) -> str:
-    lines = [f"📈 <b>Statistika</b> — {texts.BTN_LAST_30}", ""]
+    """Oxirgi 30 kun: har bir bo‘lim alohida, orasida bo‘sh qator."""
+    blocks: list[list[str]] = [[f"📈 <b>Statistika</b> — {texts.BTN_LAST_30}"]]
     if stats.report.count == 0:
-        lines += [texts.REPORT_EMPTY, ""]
+        blocks.append([texts.REPORT_EMPTY])
     for report in stats.report.currencies:
         currency, totals = report.currency, report.totals
-        lines.append(
-            f"<b>{currency}</b>: 💰 {bold(signed(totals.income, True))} · 💸 {bold(signed(totals.expense, False))}"
+        blocks.append(
+            [
+                f"<b>{currency}</b>",
+                f"💰 Kirim: {money(totals.income, currency)}",
+                f"💸 Chiqim: {money(totals.expense, currency)}",
+            ]
         )
         spending = [item for item in report.by_category if item.totals.expense > 0]
         if spending:
-            lines.append("🏷 Turlar bo‘yicha (chiqim):")
+            block = ["🏷 <b>Turlar bo‘yicha:</b>"]
             for item in spending[:10]:
                 share = float(item.totals.expense / totals.expense)
-                lines.append(
+                block.append(
                     f"• {esc(item.label)} — {bold(format_number(item.totals.expense))} ({share:.0%}) {_bar(share)}"
                 )
+            blocks.append(block)
         if report.top_expenses:
-            lines.append("🔝 Eng katta xarajatlar:")
-            lines += [
-                f"{index}. {bold(format_number(item.amount))} — {_label(item)} ({_day(item, tz)})"
-                for index, item in enumerate(report.top_expenses, start=1)
-            ]
+            blocks.append(
+                [
+                    "🔝 <b>Eng katta xarajatlar:</b>",
+                    *(
+                        f"{index}. {bold(format_number(item.amount))} — {_label(item)} ({_day(item, tz)})"
+                        for index, item in enumerate(report.top_expenses, start=1)
+                    ),
+                ]
+            )
         if report.top_merchants:
-            lines.append("🏪 Joylar bo‘yicha:")
-            lines += [
-                f"• {esc(stat.merchant)} — {stat.count} marta, {bold(format_number(stat.expense))}"
-                for stat in report.top_merchants
-            ]
-        lines.append("")
+            blocks.append(
+                [
+                    "🏪 <b>Joylar bo‘yicha:</b>",
+                    *(
+                        f"• {esc(stat.merchant)} — {stat.count} marta, {bold(format_number(stat.expense))}"
+                        for stat in report.top_merchants
+                    ),
+                ]
+            )
 
-    lines.append("📅 <b>Oylik trend:</b>")
+    trend = ["📅 <b>Oylik trend:</b>"]
     for month in stats.trend:
         if not month.totals:
-            lines.append(f"{month.label}: —")
+            trend.append(f"{month.label}: —")
             continue
         flows = [bold(f"{_plain_flow(totals)} {currency}") for currency, totals in sorted(month.totals.items())]
-        lines.append(f"{month.label}: " + "; ".join(flows))
-    return clip("\n".join(lines))
+        trend.append(f"{month.label}: " + "; ".join(flows))
+    blocks.append(trend)
+    return clip("\n\n".join("\n".join(block) for block in blocks))
