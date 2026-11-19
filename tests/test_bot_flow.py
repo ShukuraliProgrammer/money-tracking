@@ -442,11 +442,11 @@ async def test_image_file_without_declared_type_is_recognized_by_its_name(bot):
     assert "AI kaliti sozlanmagan" in bot.last_text()
 
 
-async def test_non_image_file_gets_a_reply_that_mentions_pictures(bot):
-    await bot.send_file("chek.pdf", "application/pdf")
-    reply = bot.last_text()
-    assert "faqat matnli" not in reply  # rasm ham qabul qilinadi, eski javob chalg'itardi
-    assert "rasm" in reply.lower() and "matn" in reply.lower()
+async def test_unsupported_file_gets_a_reply_listing_what_is_accepted(bot):
+    await bot.send_file("arxiv.zip", "application/zip")
+    reply = bot.last_text().lower()
+    assert "faqat matnli" not in reply  # rasm va PDF ham qabul qilinadi, eski javob chalg'itardi
+    assert "matn" in reply and "rasm" in reply and "pdf" in reply
 
 
 async def test_database_error_gets_friendly_message(bot, monkeypatch):
@@ -739,3 +739,74 @@ async def test_unreadable_image_file_asks_to_send_it_as_a_photo(session_factory)
     await bot.send_file("IMG_0012.HEIC", "image/heic", data=b"heic-bytes-pillow-cannot-read")
     assert llm.images == []
     assert "rasm sifatida" in bot.last_text()
+
+
+# --- PDF chek ------------------------------------------------------------------------- #
+
+from tests.pdf_samples import RECEIPT_LINES, make_pdf, make_scanned_pdf  # noqa: E402
+
+RECEIPT_NAME = "986017******9298_19.11.2026_14.00.22_uzum.pdf"
+
+
+async def test_pdf_receipt_is_read_without_any_ai_key(bot, session_factory):
+    await bot.send_file(RECEIPT_NAME, "application/pdf", data=make_pdf(RECEIPT_LINES))
+    assert "kirimmi yoki chiqimmi" in bot.last_text()  # chekda yo'nalish yozilmagan, bot so'raydi
+    await bot.click("Chiqim")
+    summary = bot.last_text()
+    assert "150 000 UZS" in summary and "ALIYEV VALI" in summary
+    assert "****9298" in summary and "19.11.2026 14:00" in summary
+    await bot.send("Akamga o‘tkazdim")
+    await bot.click("P2P")
+    await bot.click("Kartasiz")
+    (tx,) = await transactions(session_factory)
+    assert tx.source == "pdf"
+    assert tx.amount == Decimal("150000")
+    assert "986017" not in tx.raw_text
+
+
+async def test_pdf_is_recognized_by_name_when_type_is_missing(bot):
+    await bot.send_file("chek.PDF", None, data=make_pdf(RECEIPT_LINES))
+    assert "kirimmi yoki chiqimmi" in bot.last_text()
+
+
+async def test_pdf_after_add_command_works(bot):
+    await bot.send("/add")
+    await bot.send_file(RECEIPT_NAME, "application/pdf", data=make_pdf(RECEIPT_LINES))
+    assert "kirimmi yoki chiqimmi" in bot.last_text()
+
+
+async def test_scanned_pdf_asks_for_a_screenshot(bot):
+    await bot.send_file("skaner.pdf", "application/pdf", data=make_scanned_pdf())
+    assert "matn yo‘q" in bot.last_text() and "screenshot" in bot.last_text()
+
+
+async def test_broken_pdf_gets_friendly_message(bot):
+    await bot.send_file("chek.pdf", "application/pdf", data=b"not a pdf")
+    assert "PDF faylni o‘qib bo‘lmadi" in bot.last_text()
+
+
+async def test_pdf_without_a_transaction_starts_nothing(bot):
+    await bot.send_file("xat.pdf", "application/pdf", data=make_pdf(["Hurmatli mijoz", "Tabriklaymiz"]))
+    assert "tranzaksiyani topa olmadim" in bot.last_text()
+    await bot.send(samples.HUMO_EXPENSE)
+    assert "Nima uchun qilindi?" in bot.last_text()
+
+
+async def test_long_pdf_statement_is_refused(bot):
+    lines = [f"19.11.2026 12:{n % 60:02d} Payment {1000 + n} UZS MERCHANT NUMBER {n}" for n in range(120)]
+    await bot.send_file("vypiska.pdf", "application/pdf", data=make_pdf(lines))
+    assert "bitta chek" in bot.last_text().lower()
+
+
+async def test_pdf_while_another_transaction_is_pending_is_not_processed(bot, session_factory):
+    await bot.send(samples.CARDXABAR_EXPENSE)
+    await bot.send_file(RECEIPT_NAME, "application/pdf", data=make_pdf(RECEIPT_LINES))
+    assert "Avval" in bot.last_text()
+    await bot.send("Tushlik")
+    assert "Qaysi turga kiradi?" in bot.last_text()
+
+
+async def test_pdf_with_sms_code_is_refused(bot, session_factory):
+    await bot.send_file("kod.pdf", "application/pdf", data=make_pdf(["Tasdiqlash kodi: 123456", "Amount 5 000 UZS"]))
+    assert "SMS kod" in bot.last_text()
+    assert await transactions(session_factory) == []

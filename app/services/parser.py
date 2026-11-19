@@ -41,6 +41,12 @@ _COUNT_WORD = re.compile(r"\s*(?:kishi|nafar|odam|ta|dona|marta|kun|soat|km|%|ч
 _MERCHANT_LABEL = re.compile(
     r"(?:merchant|joy|mesto|место|terminal|torgovets|savdo\s+nuqtasi)\s*[:\-]\s*([^\n]+)", _FLAGS
 )
+# Chek va kvitansiyalardagi «qabul qiluvchi ismi» qatori (belgi va qiymat orasida ikki nuqta bo‘lmasligi mumkin).
+_RECEIVER_LABEL = re.compile(
+    r"(?:receiver\s+name|recipient\s+name|имя\s+получателя|qabul\s+qiluvchi(?:ning)?\s+ismi|oluvchi(?:ning)?\s+ismi)"
+    r"\s*[:\-]?[ \t]*([^\n]+)",
+    _FLAGS,
+)
 _CARD_MASK = re.compile(r"\*{4}\d{4}")
 _CARD_WORD = re.compile(r"karta|card|карт", _FLAGS)
 _NETWORK_WORDS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -153,6 +159,10 @@ class RuleBasedParser:
             if label:
                 raw = re.split(r"\.\s|\.$|;", label.group(1), maxsplit=1)[0]
         if raw is None:
+            receiver = _RECEIVER_LABEL.search(text)
+            if receiver:
+                raw = receiver.group(1)
+        if raw is None:
             return None
         cleaned = re.sub(r"\s+", " ", raw).strip(" .,;:-")
         return cleaned[:64] or None
@@ -182,7 +192,7 @@ class RuleBasedParser:
     def _detect_source(
         text: str, card_line: str, hints: list[CardHint], amount: AmountMatch | None, source_hint: str | None
     ) -> str:
-        if source_hint in ("cardxabar", "humo", "bank_sms", "screenshot"):
+        if source_hint in ("cardxabar", "humo", "bank_sms", "screenshot", "pdf"):
             return source_hint
         if sum(mark in text for mark in _STRUCTURE_MARKS) >= 2:
             return "humo" if re.search("humo", card_line, _FLAGS) else "cardxabar"

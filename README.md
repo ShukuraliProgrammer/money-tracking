@@ -22,7 +22,7 @@ Xabardagi karta ro‘yxatingizda bo‘lsa, bot uni o‘zi qo‘yadi; «Qaysi kar
 
 ## Imkoniyatlar
 
-- **Kiritish:** CardXabarBot va HUMOcardbot xabarlari, bank SMS’i (lotin/kirill), oddiy matn («Kamolonda 250 ming so‘m ovqatlandik»), screenshot (AI kaliti sozlangan bo‘lsa), `/add`.
+- **Kiritish:** CardXabarBot va HUMOcardbot xabarlari, bank SMS’i (lotin/kirill), oddiy matn («Kamolonda 250 ming so‘m ovqatlandik»), PDF chek, screenshot (AI kaliti sozlangan bo‘lsa), `/add`.
 - **Savollar:** nima uchun qilindi (izoh), qaysi turga kiradi va — karta xabardan aniqlanmasa — qaysi kartadan.
 - **Hisobot:** `/report` darhol shu oyning hamma kartalar bo‘yicha hisobotini ko‘rsatadi; davr, karta va tur filtri ostidagi tugmalarda. Yig‘indilar, kartalar va turlar bo‘yicha taqsimot, eng katta xarajatlar, har bir tranzaksiya izohi bilan ro‘yxat, rasm, CSV.
 - **Avtomatik hisobotlar:** har kuni 21:00 da kunlik (matn), har dushanba haftalik va har oyning 1-kuni oylik (rasm + matn). Har biri `/settings` da alohida o‘chiriladi.
@@ -155,6 +155,7 @@ Yangi format qo‘shish: namunani `tests/samples.py` ga, kutilgan natijani `test
 - Javob JSON sxema bo‘yicha so‘raladi; noto‘g‘ri JSON kelsa `LLM_MAX_ATTEMPTS` martagacha qayta so‘raladi, bo‘lmasa qoidalar natijasi ishlatiladi.
 - Anthropic uchun standart model `claude-opus-5-5`, `effort=low`. Arzonroq variant kerak bo‘lsa `ANTHROPIC_MODEL=claude-haiku-5-5` qiling. Opus/Sonnet/Fable modellarida rad etilgan so‘rov server tomonda zaxira modelga o‘tadi (`fallbacks="default"`).
 - **Screenshot** faqat LLM orqali o‘qiladi (`PARSE`/`SCREENSHOT_SYSTEM_PROMPT`): rasm provayderga yuboriladi, u tranzaksiyani va rasmdagi matnni qaytaradi, keyin natija matnli xabar bilan bir xil tekshiruvdan o‘tadi (karta raqami yashiriladi, SMS kodli rasm rad etiladi). `LLM_PROVIDER=none` bo‘lsa, bot rasm o‘rniga matn so‘raydi. Bitta rasmda bitta tranzaksiya o‘qiladi, hajmi 5 MB gacha. Rasm oddiy holda ham, fayl sifatida ham yuborilishi mumkin (JPEG, PNG, WebP, GIF; BMP va TIFF o‘zi o‘giriladi; HEIC faylini rasm sifatida yuborish kerak).
+- **PDF chek** AI’siz o‘qiladi: fayldagi matn olinadi (birinchi 3 sahifa, 5 MB gacha) va oddiy xabar kabi qoidalardan o‘tadi. Matn qatlami bo‘lmagan (skaner qilingan) PDF uchun bot screenshot so‘raydi; ko‘p tranzaksiyali ko‘chirma (vypiska) qabul qilinmaydi.
 - LLM’ga tranzaksiya matni, izoh va screenshot yuboriladi. Buni istamasangiz `LLM_PROVIDER=none` qoldiring: bot to‘liq ishlaydi, faqat erkin matnda ko‘proq savol beradi.
 
 ## Xavfsizlik
@@ -195,7 +196,7 @@ app/
 │   ├── chart_service.py    hisobot rasmi (Pillow)
 │   └── export_service.py
 ├── assets/fonts/           Inter shrifti (SIL OFL 1.1, litsenziyasi shu papkada)
-└── utils/                  money, dates, validators, crypto, logging
+└── utils/                  money, dates, validators, crypto, images, pdf, logging
 migrations/                 Alembic
 tests/                      pytest
 ```

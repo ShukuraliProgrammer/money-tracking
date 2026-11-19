@@ -53,7 +53,12 @@ STALE_BUTTON = (
     "Xabarni qaytadan yuboring."
 )
 USE_BUTTONS = "Iltimos, tugmalardan birini tanlang 👆"
-TEXT_ONLY = "Matnli xabar yoki rasm (screenshot) yuboring — boshqa turdagi fayllarni o‘qiy olmayman."
+TEXT_ONLY = "Matnli xabar, rasm (screenshot) yoki PDF chek yuboring — boshqa turdagi fayllarni o‘qiy olmayman."
+PDF_FAILED = "📄 PDF faylni o‘qib bo‘lmadi.\n\nUning screenshot’ini yoki matnini yuboring."
+PDF_NO_TEXT = "📄 Bu PDF ichida matn yo‘q — skaner qilingan bo‘lishi mumkin.\n\nUning screenshot’ini yuboring."
+PDF_NO_TRANSACTION = "📄 Bu PDF’dan tranzaksiyani topa olmadim.\n\nBitta tranzaksiya chekini yuboring."
+PDF_TOO_LONG = "📄 Bu PDF bitta chek emasga o‘xshaydi — matni juda uzun.\n\nBitta tranzaksiya chekini yuboring."
+FILE_TOO_LARGE = "Fayl juda katta (5 MB dan oshmasin)."
 PHOTO_NEEDS_AI = (
     "🖼 Rasmni o‘qish uchun AI kaliti sozlanmagan.\n\n"
     "Hozircha xabarning matnini nusxalab yuboring."

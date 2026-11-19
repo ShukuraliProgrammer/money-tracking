@@ -11,3 +11,4 @@ openai>=1.50
 redis>=5
 tzdata
 Pillow>=10.1
+pypdf>=5

@@ -13,7 +13,7 @@ from app.utils.validators import is_valid_last4
 
 TransactionType = Literal["income", "expense"]
 CardNetwork = Literal["Uzcard", "Humo", "Visa", "Mastercard", "Unknown"]
-Source = Literal["cardxabar", "humo", "bank_sms", "manual", "screenshot"]
+Source = Literal["cardxabar", "humo", "bank_sms", "manual", "screenshot", "pdf"]
 RecurringPeriod = Literal["none", "daily", "weekly", "monthly", "yearly"]
 
 CARD_NETWORKS: tuple[str, ...] = ("Uzcard", "Humo", "Visa", "Mastercard", "Unknown")

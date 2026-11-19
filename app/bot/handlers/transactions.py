@@ -8,6 +8,7 @@ Bot faqat foydalanuvchining o‘zi yuborgan yoki forward qilgan xabar bilan ishl
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import suppress
 from datetime import datetime, timedelta
@@ -46,6 +47,7 @@ from app.services.transfers import (
 from app.utils.dates import parse_user_datetime
 from app.utils.images import guess_image_type, to_supported_image
 from app.utils.money import parse_amount
+from app.utils.pdf import PdfError, extract_pdf_text
 from app.utils.validators import (
     contains_full_card_number,
     contains_secret_code,
@@ -57,6 +59,7 @@ MAX_TEXT_LENGTH = 2000
 MAX_NOTE_LENGTH = 500
 MAX_AMOUNT = Decimal("10000000000000")
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_PDF_TEXT_LENGTH = 4000
 
 _FORWARD_SOURCES = {"cardxabarbot": "cardxabar", "humocardbot": "humo"}
 _rules = RuleBasedParser()
@@ -72,7 +75,15 @@ def image_type(message: Message) -> str | None:
     return None
 
 
+def is_pdf(message: Message) -> bool:
+    document = message.document
+    if document is None:
+        return False
+    return document.mime_type == "application/pdf" or (document.file_name or "").lower().endswith(".pdf")
+
+
 IMAGE = F.func(lambda message: image_type(message) is not None)
+PDF = F.func(is_pdf)
 
 BUTTON_STATES = (
     TxFlow.waiting_type,
@@ -186,6 +197,22 @@ async def on_new_message(
     if len(text) > MAX_TEXT_LENGTH:
         await message.answer(texts.TOO_LONG)
         return
+    source_hint, _ = forward_info(message)
+    await _process_text(message, state, session, user, parser, clock, text, source_hint, texts.NOT_UNDERSTOOD)
+
+
+async def _process_text(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    parser: TransactionParser,
+    clock: Clock,
+    text: str,
+    source_hint: str | None,
+    not_understood: str,
+) -> None:
+    """Matnni (xabar yoki PDF’dan olingan) tranzaksiya qoralamasiga aylantiradi va oqimni boshlaydi."""
     if contains_secret_code(text):
         # Maxfiy kod bo‘lishi mumkin: hech narsa saqlanmaydi va LLM’ga yuborilmaydi.
         with suppress(TelegramAPIError):
@@ -193,12 +220,11 @@ async def on_new_message(
         await message.answer(texts.SECRET_WARNING)
         return
 
-    source_hint, _ = forward_info(message)
     categories = [category.name for category in await ts.list_categories(session, user.id)]
     draft = await parser.parse(text, user.tz, clock(), source_hint=source_hint, categories=categories)
 
-    if draft.amount is None and draft.transaction_type is None and draft.card_last4 is None:
-        await message.answer(texts.NOT_UNDERSTOOD)
+    if draft.amount is None and draft.transaction_type is None:
+        await message.answer(not_understood)
         return
     if contains_full_card_number(text):
         with suppress(TelegramAPIError):
@@ -267,6 +293,36 @@ async def on_image(
         await message.answer(texts.PHOTO_NO_TRANSACTION)
         return
     await _start_draft(message, state, session, user, draft)
+
+
+async def on_pdf(
+    message: Message,
+    bot: Bot,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    parser: TransactionParser,
+    clock: Clock,
+) -> None:
+    """PDF chek: matni olinadi va oddiy matnli xabar kabi o‘qiladi (AI kaliti shart emas)."""
+    document = message.document
+    if (document.file_size or 0) > MAX_IMAGE_BYTES:
+        await message.answer(texts.FILE_TOO_LARGE)
+        return
+    try:
+        buffer = await bot.download(document)
+        text = await asyncio.to_thread(extract_pdf_text, buffer.getvalue())
+    except (PdfError, TelegramAPIError) as error:
+        logger.warning("PDF not read: %s", type(error).__name__)
+        await message.answer(texts.PDF_FAILED)
+        return
+    if not text:
+        await message.answer(texts.PDF_NO_TEXT)
+        return
+    if len(text) > MAX_PDF_TEXT_LENGTH:
+        await message.answer(texts.PDF_TOO_LONG)
+        return
+    await _process_text(message, state, session, user, parser, clock, text, "pdf", texts.PDF_NO_TRANSACTION)
 
 
 async def on_image_while_busy(message: Message) -> None:
@@ -698,7 +754,8 @@ def create_router() -> Router:
     message.register(on_new_card_name, TxFlow.waiting_new_card_name, PLAIN_TEXT)
     message.register(on_text_instead_of_button, StateFilter(*BUTTON_STATES), PLAIN_TEXT)
     message.register(on_image, StateFilter(None, TxFlow.waiting_input), IMAGE)
-    message.register(on_image_while_busy, IMAGE)
+    message.register(on_pdf, StateFilter(None, TxFlow.waiting_input), PDF)
+    message.register(on_image_while_busy, IMAGE | PDF)
     message.register(on_new_message, StateFilter(None, TxFlow.waiting_input), PLAIN_TEXT)
     message.register(on_unsupported)
     return router
