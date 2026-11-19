@@ -40,6 +40,7 @@ from app.services.notes import NoteAnalyzer
 from app.services.parser import RuleBasedParser, TransactionParser
 from app.services.transfers import (
     Leg,
+    find_saved_receipt_legs,
     find_transfer_counterpart,
     is_transfer_pair,
     split_pair,
@@ -241,8 +242,41 @@ async def _start_draft(
         # Sana yozilmagan, lekin forward qilingan xabarning asl yuborilgan vaqti ma’lum.
         draft.occurred_at = forwarded_at
     draft.refresh_missing_fields()
+    if draft.transfer is not None and await _resolve_receipt(message, state, session, user, draft):
+        return
     await state.set_data({"draft": draft.model_dump(mode="json")})
     await advance(message, state, session, user)
+
+
+async def _resolve_receipt(
+    message: Message, state: FSMContext, session: AsyncSession, user: User, draft: ParsedTransaction
+) -> bool:
+    """O‘tkazma chekining yo‘nalishini foydalanuvchi kartalariga qarab aniqlaydi.
+
+    Ikkala karta ham foydalanuvchiniki bo‘lsa, bu o‘z kartalar orasidagi o‘tkazma: so‘rab, yozmaslik
+    taklif qilinadi (``True`` qaytadi). Aks holda kirim yoki chiqim belgilanadi va oqim davom etadi.
+    """
+    receipt = draft.transfer
+    own = {card.card_last4 for card in await ts.list_cards(session, user.id)}
+    sender_mine = receipt.sender_last4 in own
+    receiver_mine = receipt.receiver_last4 in own
+
+    if sender_mine and receiver_mine and receipt.sender_last4 != receipt.receiver_last4:
+        draft.apply_direction("expense")  # foydalanuvchi «alohida» desa, chiqim sifatida davom etadi
+        sent = Leg("expense", receipt.sender_amount, draft.currency, draft.occurred_at, receipt.sender_last4)
+        received = Leg("income", receipt.receiver_amount, draft.currency, draft.occurred_at, receipt.receiver_last4)
+        await state.set_data({"draft": draft.model_dump(mode="json")})
+        await state.set_state(TxFlow.waiting_transfer)
+        await message.answer(
+            texts.TRANSFER_SUSPECTED_RECEIPT.format(route=render.transfer_route(sent, received)),
+            reply_markup=kb.transfer_choice("tx:trr"),
+        )
+        return True
+    if receiver_mine and not sender_mine:
+        draft.apply_direction("income")
+    elif sender_mine:
+        draft.apply_direction("expense")
+    return False
 
 
 async def on_image(
@@ -363,7 +397,7 @@ async def on_amount(message: Message, state: FSMContext, session: AsyncSession, 
 
 async def on_type(callback: CallbackQuery, state: FSMContext, session: AsyncSession, user: User) -> None:
     draft = await load_draft(state)
-    draft.transaction_type = "income" if callback.data.endswith("income") else "expense"
+    draft.apply_direction("income" if callback.data.endswith("income") else "expense")
     await store_draft(state, draft)
     await remove_buttons(callback)
     await advance(callback_message(callback), state, session, user)
@@ -434,7 +468,7 @@ async def on_edit_choice(callback: CallbackQuery, state: FSMContext, session: As
     else:
         if action == "type":
             draft = await load_draft(state)
-            draft.transaction_type = "expense" if draft.transaction_type == "income" else "income"
+            draft.apply_direction("expense" if draft.transaction_type == "income" else "income")
             await store_draft(state, draft)
         await advance(message, state, session, user)
 
@@ -525,6 +559,24 @@ async def on_pending_pair_choice(callback: CallbackQuery, state: FSMContext, cal
     else:
         await state.update_data(pair_prompt=False)
         await message.answer(texts.FINISH_PENDING_FIRST, reply_markup=kb.draft_actions())
+
+
+async def on_receipt_transfer_choice(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, user: User
+) -> None:
+    """Chekdagi ikkala karta ham foydalanuvchiniki: yozmaslik yoki oddiy chiqim sifatida davom etish."""
+    await remove_buttons(callback)
+    message = callback_message(callback)
+    if callback.data.endswith(":yes"):
+        # Shu o‘tkazmaning karta xabari avval saqlangan bo‘lsa, u ham olib tashlanadi.
+        saved = await find_saved_receipt_legs(session, user.id, await load_draft(state))
+        for leg in saved:
+            await ts.delete_transaction(session, user.id, leg.id)
+        await state.clear()
+        await message.answer(texts.TRANSFER_DROPPED_WITH_SAVED if saved else texts.TRANSFER_DROPPED)
+    else:
+        await state.update_data(transfer_declined=True)
+        await advance(message, state, session, user)
 
 
 async def on_saved_pair_choice(callback: CallbackQuery, state: FSMContext, session: AsyncSession, user: User) -> None:
@@ -736,6 +788,7 @@ def create_router() -> Router:
     callback.register(on_own_transfer, F.data == "tx:own", TxFlow.waiting_note)
     callback.register(on_pending_pair_choice, F.data.regexp(r"^tx:trp:(yes|no)$"), TxFlow.waiting_note)
     callback.register(on_saved_pair_choice, F.data.regexp(r"^tx:tr:(yes|no)$"), TxFlow.waiting_transfer)
+    callback.register(on_receipt_transfer_choice, F.data.regexp(r"^tx:trr:(yes|no)$"), TxFlow.waiting_transfer)
     callback.register(on_edit_choice, F.data.startswith("tx:ed:"), TxFlow.edit_menu)
     callback.register(on_new_category_request, F.data == "tx:cat:new", TxFlow.waiting_category)
     callback.register(on_category, F.data.regexp(r"^tx:cat:\d+$"), TxFlow.waiting_category)

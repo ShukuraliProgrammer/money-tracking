@@ -155,6 +155,7 @@ Yangi format qo‘shish: namunani `tests/samples.py` ga, kutilgan natijani `test
 - Javob JSON sxema bo‘yicha so‘raladi; noto‘g‘ri JSON kelsa `LLM_MAX_ATTEMPTS` martagacha qayta so‘raladi, bo‘lmasa qoidalar natijasi ishlatiladi.
 - Anthropic uchun standart model `claude-opus-5-5`, `effort=low`. Arzonroq variant kerak bo‘lsa `ANTHROPIC_MODEL=claude-haiku-5-5` qiling. Opus/Sonnet/Fable modellarida rad etilgan so‘rov server tomonda zaxira modelga o‘tadi (`fallbacks="default"`).
 - **Screenshot** faqat LLM orqali o‘qiladi (`PARSE`/`SCREENSHOT_SYSTEM_PROMPT`): rasm provayderga yuboriladi, u tranzaksiyani va rasmdagi matnni qaytaradi, keyin natija matnli xabar bilan bir xil tekshiruvdan o‘tadi (karta raqami yashiriladi, SMS kodli rasm rad etiladi). `LLM_PROVIDER=none` bo‘lsa, bot rasm o‘rniga matn so‘raydi. Bitta rasmda bitta tranzaksiya o‘qiladi, hajmi 5 MB gacha. Rasm oddiy holda ham, fayl sifatida ham yuborilishi mumkin (JPEG, PNG, WebP, GIF; BMP va TIFF o‘zi o‘giriladi; HEIC faylini rasm sifatida yuborish kerak).
+- **O‘tkazma cheki** (masalan, Uzum Bank PDF’i)da jo‘natuvchi va qabul qiluvchi kartasi bo‘ladi, shuning uchun yo‘nalishni bot ro‘yxatdagi kartalaringizga qarab o‘zi aniqlaydi: jo‘natuvchi karta sizniki — chiqim, qabul qiluvchi sizniki — kirim, ikkalasi ham sizniki — o‘z kartalar orasidagi o‘tkazma (yozmaslikni taklif qiladi va shu o‘tkazmaning avval saqlangan karta xabarini ham o‘chiradi). Kartalar ro‘yxatda bo‘lmasa, bot so‘raydi.
 - **PDF chek** AI’siz o‘qiladi: fayldagi matn olinadi (birinchi 3 sahifa, 5 MB gacha) va oddiy xabar kabi qoidalardan o‘tadi. Matn qatlami bo‘lmagan (skaner qilingan) PDF uchun bot screenshot so‘raydi; ko‘p tranzaksiyali ko‘chirma (vypiska) qabul qilinmaydi.
 - LLM’ga tranzaksiya matni, izoh va screenshot yuboriladi. Buni istamasangiz `LLM_PROVIDER=none` qoldiring: bot to‘liq ishlaydi, faqat erkin matnda ko‘proq savol beradi.
 
@@ -191,6 +192,7 @@ app/
 │   ├── llm.py              promptlar, Anthropic/OpenAI mijozlari
 │   ├── notes.py            izoh tahlili (kishi soni, takrorlanish, tur taklifi)
 │   ├── transfers.py        o‘z kartalar orasidagi o‘tkazmani tanish
+│   ├── receipts.py         o‘tkazma cheklarini o‘qish (sarlavha–qiymat juftliklari)
 │   ├── transaction_service.py
 │   ├── report_service.py
 │   ├── chart_service.py    hisobot rasmi (Pillow)

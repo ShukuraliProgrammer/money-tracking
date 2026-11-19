@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from app.schemas import LLMTransaction, ParsedTransaction
 from app.services.llm import ImageInput, LLMError
+from app.services.receipts import Receipt, extract_transfer_receipt
 from app.utils.dates import find_datetime, relative_day_offset
 from app.utils.money import AmountMatch, find_amounts, format_amount
 from app.utils.validators import CardHint, mask_card_numbers, unify_apostrophes
@@ -44,9 +45,10 @@ _MERCHANT_LABEL = re.compile(
 # Chek va kvitansiyalardagi «qabul qiluvchi ismi» qatori (belgi va qiymat orasida ikki nuqta bo‘lmasligi mumkin).
 _RECEIVER_LABEL = re.compile(
     r"(?:receiver\s+name|recipient\s+name|имя\s+получателя|qabul\s+qiluvchi(?:ning)?\s+ismi|oluvchi(?:ning)?\s+ismi)"
-    r"\s*[:\-]?[ \t]*([^\n]+)",
+    r"[ \t]*[:\-]?[ \t]*([^\n]+)",
     _FLAGS,
 )
+_FEE = re.compile(r"\bfee\b|commission|комисси|komissiya", _FLAGS)
 _CARD_MASK = re.compile(r"\*{4}\d{4}")
 _CARD_WORD = re.compile(r"karta|card|карт", _FLAGS)
 _NETWORK_WORDS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -82,6 +84,10 @@ class RuleBasedParser:
         masked, hints = mask_card_numbers(text.strip())
         work = unify_apostrophes(masked)
 
+        receipt = extract_transfer_receipt(unify_apostrophes(text.strip()), tz)
+        if receipt is not None:
+            return self._from_receipt(receipt, masked, work, tz, source_hint)
+
         date_match = find_datetime(work, tz)
         occurred_at = date_match.value if date_match else None
         if occurred_at is None:
@@ -113,6 +119,29 @@ class RuleBasedParser:
         parsed.explanation = describe(parsed)
         return parsed
 
+    def _from_receipt(
+        self, receipt: Receipt, masked: str, work: str, tz: ZoneInfo, source_hint: str | None
+    ) -> ParsedTransaction:
+        """O‘tkazma cheki: yo‘nalish taxmin qilinmaydi, standart holatda jo‘natuvchi tomoni olinadi."""
+        transfer = receipt.transfer
+        fallback_date = find_datetime(work, tz)
+        parsed = ParsedTransaction(
+            transaction_type=None,
+            amount=transfer.sender_amount,
+            currency=receipt.currency,
+            merchant=transfer.receiver_name,
+            card_last4=transfer.sender_last4 or transfer.receiver_last4,
+            card_network=transfer.sender_network if transfer.sender_last4 else transfer.receiver_network,
+            occurred_at=receipt.occurred_at or (fallback_date.value if fallback_date else None),
+            source=source_hint if source_hint in ("pdf", "screenshot", "bank_sms") else "bank_sms",
+            raw_text=masked,
+            transfer=transfer,
+        )
+        parsed.refresh_missing_fields()
+        parsed.confidence = self._confidence(parsed)
+        parsed.explanation = describe(parsed)
+        return parsed
+
     @staticmethod
     def _choose_amount(text: str) -> AmountMatch | None:
         candidates: list[AmountMatch] = []
@@ -121,7 +150,7 @@ class RuleBasedParser:
             line_start = text.rfind("\n", 0, match.start) + 1
             context = text[max(previous_end, line_start) : match.start]
             previous_end = match.end
-            if _BALANCE.search(context):
+            if _BALANCE.search(context) or _FEE.search(context):
                 continue
             candidates.append(match)
         if not candidates:
@@ -247,7 +276,8 @@ class TransactionParser:
         categories: list[str] | None = None,
     ) -> ParsedTransaction:
         rule = self._rules.parse(text, tz, now, source_hint=source_hint)
-        if self._llm is None or self._is_sufficient(rule):
+        # O‘tkazma cheki qoidalar bilan to‘liq o‘qiladi; yo‘nalishini LLM emas, foydalanuvchi kartalari hal qiladi.
+        if self._llm is None or rule.transfer is not None or self._is_sufficient(rule):
             return rule
         try:
             # LLM’ga faqat karta raqami yashirilgan matn yuboriladi.

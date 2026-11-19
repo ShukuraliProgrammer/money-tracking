@@ -21,6 +21,19 @@ RECURRING_PERIODS: tuple[str, ...] = ("none", "daily", "weekly", "monthly", "yea
 REQUIRED_FIELDS: tuple[str, ...] = ("amount", "transaction_type", "occurred_at", "merchant", "card_last4")
 
 
+class TransferReceipt(BaseModel):
+    """O‘tkazma chekidagi ikki tomon. Qaysi biri foydalanuvchiniki ekani kartalariga qarab aniqlanadi."""
+
+    sender_last4: str | None = None
+    sender_network: CardNetwork = "Unknown"
+    sender_name: str | None = None
+    sender_amount: Decimal
+    receiver_last4: str | None = None
+    receiver_network: CardNetwork = "Unknown"
+    receiver_name: str | None = None
+    receiver_amount: Decimal
+
+
 class ParsedTransaction(BaseModel):
     """Xabardan ajratib olingan tranzaksiya qoralamasi (hali bazaga yozilmagan)."""
 
@@ -37,9 +50,27 @@ class ParsedTransaction(BaseModel):
     explanation: str | None = None
     source: Source = "manual"
     raw_text: str = ""
+    # Faqat o‘tkazma cheklari uchun: jo‘natuvchi va qabul qiluvchi tomonlar.
+    transfer: TransferReceipt | None = None
 
     def refresh_missing_fields(self) -> None:
         self.missing_fields = [name for name in REQUIRED_FIELDS if getattr(self, name) is None]
+
+    def apply_direction(self, transaction_type: str) -> None:
+        """O‘tkazma chekini kirim yoki chiqim sifatida o‘qiydi: summa, karta va ikkinchi tomon shunga mos olinadi."""
+        self.transaction_type = transaction_type  # type: ignore[assignment]
+        if self.transfer is None:
+            return
+        receipt = self.transfer
+        if transaction_type == "income":
+            self.amount = receipt.receiver_amount
+            self.card_last4, self.card_network = receipt.receiver_last4, receipt.receiver_network
+            self.merchant = receipt.sender_name
+        else:
+            self.amount = receipt.sender_amount
+            self.card_last4, self.card_network = receipt.sender_last4, receipt.sender_network
+            self.merchant = receipt.receiver_name
+        self.refresh_missing_fields()
 
 
 def _clean_currency(value: Any) -> str:

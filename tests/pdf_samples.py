@@ -50,3 +50,19 @@ def make_scanned_pdf() -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (60, 80), (255, 255, 255)).save(buffer, format="PDF")
     return buffer.getvalue()
+
+# Uzum Bank o'tkazma chekining haqiqiy tuzilishi: avval barcha sarlavhalar, keyin barcha qiymatlar
+# (foydalanuvchi yuborgan chek asosida; karta raqamlari, ismlar va ID to'qima).
+UZUM_LABELS = [
+    "Sender", "Sender name", "Receiver", "Receiver name", "Transaction ID", "Transaction date",
+    "Received date", "Receiver fee", "Receiver amount", "Sender fee", "Sender amount",
+]  # fmt: skip
+
+
+def uzum_receipt_lines(sender_amount="1,000.00 UZS", receiver_amount="1,000.00 UZS", sender_fee="0.00 UZS") -> list[str]:
+    values = [
+        "441122******3344", "TESTOV TEST", "986017******5566", "TESTOV T",
+        "0a1b2c3d-71af-4568-8836-2db8a43a760a", "19.11.2026 10:28:23", "19.11.2026 10:28:24",
+        "0.00 UZS", receiver_amount, sender_fee, sender_amount,
+    ]  # fmt: skip
+    return [*UZUM_LABELS, *values]

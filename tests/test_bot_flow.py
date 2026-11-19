@@ -813,3 +813,83 @@ async def test_pdf_with_sms_code_is_refused(bot, session_factory):
     await bot.send_file("kod.pdf", "application/pdf", data=make_pdf(["Tasdiqlash kodi: 123456", "Amount 5 000 UZS"]))
     assert "SMS kod" in bot.last_text()
     assert await transactions(session_factory) == []
+
+
+# --- O'tkazma cheki: yo'nalish foydalanuvchining kartalariga qarab aniqlanadi --------- #
+
+from tests.pdf_samples import uzum_receipt_lines  # noqa: E402
+
+
+async def send_uzum_receipt(bot, **kwargs):
+    await bot.send_file("441122******3344_19.11.2026_uzum.pdf", "application/pdf", data=make_pdf(uzum_receipt_lines(**kwargs)))
+
+
+async def test_receipt_between_two_own_cards_is_offered_to_be_skipped(bot, session_factory):
+    await add_card(session_factory, last4="3344", name="Visa", network="Visa")
+    await add_card(session_factory, last4="5566", name="Humo", network="Humo")
+    await send_uzum_receipt(bot)
+    prompt = bot.last_text()
+    assert "o‘z kartalaringiz orasidagi o‘tkazma" in prompt
+    assert "****3344 → ****5566" in prompt and "1 000 UZS" in prompt
+    await bot.click("Ha, yozilmasin")
+    assert "yozilmadi" in bot.last_text()
+    assert await transactions(session_factory) == []
+    await bot.send(samples.HUMO_EXPENSE)  # holat tozalangan
+    assert "Nima uchun qilindi?" in bot.last_text()
+
+
+async def test_skipping_own_transfer_receipt_also_removes_its_saved_notification(bot, session_factory):
+    await add_card(session_factory, last4="3344", name="Visa", network="Visa")
+    await add_card(session_factory, last4="5566", name="Humo", network="Humo")
+    notification = samples.REAL_HUMO_TOPUP.replace("*7731", "*5566")  # shu o'tkazmaning Humo xabari
+    await bot.send(notification)
+    await bot.send("Visadan o‘tkazdim")
+    await bot.click("P2P")
+    assert len(await transactions(session_factory)) == 1
+    await send_uzum_receipt(bot)
+    await bot.click("Ha, yozilmasin")
+    assert "Avval saqlangan qismi ham o‘chirildi" in bot.last_text()
+    assert await transactions(session_factory) == []
+
+
+async def test_receipt_from_own_card_to_someone_else_is_an_expense(bot, session_factory):
+    await add_card(session_factory, last4="3344", name="Visa", network="Visa")
+    await send_uzum_receipt(bot, sender_amount="1,005.00 UZS", sender_fee="5.00 UZS")
+    assert bot.last_text().splitlines()[:5] == [
+        "💸 <b>Chiqim</b>",
+        "➖ <b>1 005 UZS</b>",  # jo'natuvchi summasi (komissiya bilan)
+        "📍 TESTOV T",
+        "💳 ****3344",
+        "🕓 19.11.2026 10:28",
+    ]
+    await bot.send("Akamga")
+    await bot.click("P2P")
+    (tx,) = await transactions(session_factory)
+    assert (tx.transaction_type, tx.amount, tx.card.card_last4) == ("expense", Decimal("1005"), "3344")
+
+
+async def test_receipt_from_someone_else_to_own_card_is_an_income(bot, session_factory):
+    await add_card(session_factory, last4="5566", name="Humo", network="Humo")
+    await send_uzum_receipt(bot, sender_amount="1,005.00 UZS", sender_fee="5.00 UZS")
+    assert bot.last_text().splitlines()[:5] == [
+        "💰 <b>Kirim</b>",
+        "➕ <b>1 000 UZS</b>",  # qabul qilingan summa
+        "👤 TESTOV TEST",
+        "💳 ****5566",
+        "🕓 19.11.2026 10:28",
+    ]
+
+
+async def test_receipt_with_unknown_cards_asks_direction(bot):
+    await send_uzum_receipt(bot)
+    assert "kirimmi yoki chiqimmi" in bot.last_text()
+    await bot.click("Chiqim")
+    assert "➖ <b>1 000 UZS</b>" in bot.last_text() and "💳 ****3344" in bot.last_text()
+
+
+async def test_declining_own_transfer_receipt_records_it_as_expense(bot, session_factory):
+    await add_card(session_factory, last4="3344", name="Visa", network="Visa")
+    await add_card(session_factory, last4="5566", name="Humo", network="Humo")
+    await send_uzum_receipt(bot)
+    await bot.click("Yo‘q")
+    assert "<b>Chiqim</b>" in bot.last_text() and "Nima uchun qilindi?" in bot.last_text()

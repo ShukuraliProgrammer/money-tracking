@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Transaction
-from app.schemas import ParsedTransaction
+from app.schemas import ParsedTransaction, TransferReceipt
 
 TRANSFER_WINDOW = timedelta(minutes=10)
 # Jo‘natuvchi kartadan ushlanadigan komissiya uchun ruxsat etilgan farq.
@@ -86,3 +86,36 @@ async def find_transfer_counterpart(
     )
     matches = [item for item in candidates if is_transfer_pair(incoming, Leg.from_transaction(item))]
     return min(matches, key=lambda item: abs(item.occurred_at - incoming.occurred_at), default=None)
+
+
+def _same_amount(first: Decimal, second: Decimal) -> bool:
+    low, high = sorted((first, second))
+    return high <= low * (1 + MAX_FEE_SHARE)
+
+
+async def find_saved_receipt_legs(
+    session: AsyncSession, user_id: int, parsed: ParsedTransaction
+) -> list[Transaction]:
+    """O‘tkazma chekiga tegishli, avval saqlangan tomonlar (masalan, shu o‘tkazmaning karta xabari)."""
+    receipt: TransferReceipt | None = parsed.transfer
+    if receipt is None or parsed.occurred_at is None:
+        return []
+    candidates = await session.scalars(
+        select(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.currency == parsed.currency,
+            Transaction.occurred_at >= parsed.occurred_at - TRANSFER_WINDOW,
+            Transaction.occurred_at <= parsed.occurred_at + TRANSFER_WINDOW,
+        )
+    )
+    legs = []
+    for item in candidates:
+        last4 = item.card.card_last4 if item.card else None
+        if last4 is None:
+            continue
+        is_received = item.transaction_type == "income" and last4 == receipt.receiver_last4
+        is_sent = item.transaction_type == "expense" and last4 == receipt.sender_last4
+        expected = receipt.receiver_amount if is_received else receipt.sender_amount
+        if (is_received or is_sent) and _same_amount(item.amount, expected):
+            legs.append(item)
+    return legs

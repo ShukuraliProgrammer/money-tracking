@@ -165,6 +165,11 @@ TRANSFER_SUSPECTED_SAVED = (
     "{line}\n\n"
     "Ikkalasi ham hisobotga yozilmasinmi?"
 )
+TRANSFER_SUSPECTED_RECEIPT = (
+    "🔁 Bu o‘z kartalaringiz orasidagi o‘tkazma:\n\n"
+    "{route}\n\n"
+    "Hisobotga yozilmasinmi?"
+)
 TRANSFER_FEE = " (komissiya {fee})"
 BTN_TRANSFER_YES = "✅ Ha, yozilmasin"
 BTN_TRANSFER_NO = "➡️ Yo‘q, alohida tranzaksiya"
