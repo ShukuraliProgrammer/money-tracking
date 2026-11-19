@@ -148,59 +148,83 @@ Vaqtlar foydalanuvchining vaqt zonasi bo‘yicha (`/settings`).
 - Bot belgilangan vaqtda ishlamay turgan bo‘lsa, haftalik va oylik hisobot keyingi tekshiruvda (har 30 daqiqada) yuboriladi. Kunlik hisobot faqat o‘sha kuni 21:00–24:00 orasida yuboriladi.
 - 21:00 dan keyingi tranzaksiyalar o‘sha kungi kunlik hisobotga kirmaydi, lekin haftalik va oylik hisobotda bo‘ladi.
 
-## Serverga joylash (CI/CD)
+## Serverga joylash
 
-GitHub Actions testlarni ishga tushiradi va o‘tsa, kodni serverga ko‘chirib botni qayta yig‘adi (`.github/workflows/deploy.yml`). Deploy `main` branchiga push bo‘lganda yoki Actions sahifasidagi **Run workflow** tugmasi bilan ishlaydi.
+Domen kerak emas: bot Telegram’dan xabarlarni o‘zi so‘rab oladi, serverga tashqaridan hech kim ulanmaydi.
 
-Domen kerak emas: bot Telegram’dan xabarlarni o‘zi so‘rab oladi, serverga tashqaridan hech kim ulanmaydi. Parol ham ishlatilmaydi: GitHub serverga SSH kalit bilan kiradi. Bot tokeni va boshqa sozlamalar GitHub’da emas, serverdagi `.env` faylida turadi.
+**1. Repo’ni serverga clone qiling** (Ubuntu yoki Debian):
 
-**1. Deploy kalitini yarating** (o‘z kompyuteringizda):
+```bash
+git clone https://github.com/ShukuraliProgrammer/money-tracking.git
+```
+
+```bash
+cd money-tracking
+```
+
+**2. Serverni tayyorlang:**
+
+```bash
+sudo bash deploy/server-setup.sh
+```
+
+Skript Docker’ni o‘rnatadi (bo‘lmasa) va shu papkada `.env` faylini shifrlash kaliti va PostgreSQL paroli bilan yaratadi. Qayta ishga tushirish xavfsiz.
+
+**3. Bot tokenini yozing:**
+
+```bash
+nano .env
+```
+
+`BOT_TOKEN=` qatoriga @BotFather bergan tokenni qo‘ying. LLM kaliti kabi boshqa sozlamalar ham shu faylga yoziladi (`.env.example` ga qarang).
+
+**4. Ishga tushiring:**
+
+```bash
+docker compose up -d --build
+```
+
+Keyingi yangilanishlar qo‘lda shunday olinadi:
+
+```bash
+git pull && docker compose up -d --build
+```
+
+### Avtomatik yangilash (ixtiyoriy)
+
+`.github/workflows/deploy.yml` testlarni ishga tushiradi va o‘tsa, serverga SSH orqali kirib shu ikki buyruqni o‘zi bajaradi: `git pull` va `docker compose up -d --build`. Keyin bot 20 soniya yiqilmay ishlab turganini tekshiradi; yiqilsa, xato bilan tugaydi va oxirgi loglarni ko‘rsatadi. U `main` branchiga push bo‘lganda yoki Actions sahifasidagi **Run workflow** tugmasi bilan ishlaydi.
+
+Yoqish uchun:
+
+1. O‘z kompyuteringizda deploy kalitini yarating:
 
 ```bash
 ssh-keygen -t ed25519 -N "" -C moneytrack-deploy -f moneytrack_deploy
 ```
 
-`moneytrack_deploy` — maxfiy kalit (GitHub’ga), `moneytrack_deploy.pub` — ochiq kalit (serverga).
-
-**2. Serverni tayyorlang** (Ubuntu yoki Debian, bir marta). `SERVER_IP` o‘rniga server manzilini yozing:
+2. Ochiq kalitni (`moneytrack_deploy.pub` mazmunini) serverda o‘z foydalanuvchingizga qo‘shing:
 
 ```bash
-scp deploy/server-setup.sh root@SERVER_IP:/root/
+sudo bash deploy/server-setup.sh "ssh-ed25519 AAAA... moneytrack-deploy"
 ```
 
-```bash
-ssh root@SERVER_IP "bash /root/server-setup.sh '$(cat moneytrack_deploy.pub)'"
-```
-
-Skript Docker’ni o‘rnatadi (bo‘lmasa), `deploy` foydalanuvchisini va `/opt/moneytrack` papkasini yaratadi, `.env` faylini shifrlash kaliti va PostgreSQL paroli bilan tayyorlaydi. Oxirida GitHub’ga kiritiladigan qiymatlarni chiqarib beradi.
-
-**3. Bot tokenini yozing** (serverda):
-
-```bash
-ssh root@SERVER_IP "nano /opt/moneytrack/.env"
-```
-
-`BOT_TOKEN=` qatoriga @BotFather bergan tokenni qo‘ying. LLM kaliti kabi boshqa sozlamalar ham shu faylga yoziladi (`.env.example` ga qarang).
-
-**4. GitHub’da sirlarni kiriting** (repo → Settings → Secrets and variables → Actions → New repository secret):
+3. GitHub’da sirlarni kiriting (repo → Settings → Secrets and variables → Actions):
 
 | Nomi | Qiymati |
 |---|---|
 | `DEPLOY_HOST` | server IP manzili |
-| `DEPLOY_USER` | `deploy` |
+| `DEPLOY_USER` | repo’ni clone qilgan foydalanuvchi |
 | `DEPLOY_SSH_KEY` | `moneytrack_deploy` faylining to‘liq mazmuni |
-| `DEPLOY_KNOWN_HOSTS` | ixtiyoriy, lekin tavsiya etiladi: skript chiqargan `<server IP> ssh-ed25519 …` qatori |
-| `DEPLOY_PORT`, `DEPLOY_PATH` | ixtiyoriy: SSH porti (22) va papka (`/opt/moneytrack`) standartdan farq qilsa |
+| `DEPLOY_PATH` | ixtiyoriy: repo papkasi, agar uy papkasidagi `money-tracking` bo‘lmasa |
+| `DEPLOY_PORT` | ixtiyoriy: SSH porti, agar 22 bo‘lmasa |
 
-**5. Ishga tushiring:** GitHub → Actions → **CI/CD** → **Run workflow**. Keyin har safar `main`’ga push bo‘lganda o‘zi ishlaydi.
-
-Deploy bot 20 soniya davomida yiqilmay ishlab turganini tekshiradi; yiqilsa, xato bilan tugaydi va oxirgi loglarni ko‘rsatadi.
+Bot tokeni va boshqa sozlamalar GitHub’da emas, faqat serverdagi `.env` faylida turadi. Sirlar kiritilmagan bo‘lsa, deploy qadami xato bilan to‘xtaydi; testlar baribir ishlaydi.
 
 Eslatmalar:
 
-- **Bitta nusxa.** Bir token bilan bir vaqtda faqat bitta bot ishlashi mumkin. Serverga o‘tkazgach, kompyuteringizdagi yoki eski joydagi botni to‘xtating (`docker compose down`).
+- **Bitta nusxa.** Bir token bilan bir vaqtda faqat bitta bot ishlashi mumkin. Serverda ishga tushirgach, boshqa joydagi botni to‘xtating (`docker compose down`).
 - **Mavjud ma’lumotlar.** Yangi serverda baza bo‘sh boshlanadi. Boshqa PostgreSQL’dan ko‘chirayotgan bo‘lsangiz, `pg_dump` nusxasini tiklang va eski `ENCRYPTION_KEY`’ni ham olib o‘ting; kalit boshqa bo‘lsa, eski izohlar o‘qilmaydi. Eski SQLite bazasi avtomatik ko‘chirilmaydi.
-- **Xavfsizlik.** Hammasi ishlagach, serverda SSH’ga parol bilan kirishni o‘chirib qo‘yish tavsiya etiladi.
+- **Serverda kodni qo‘lda o‘zgartirmang.** Avtomatik yangilash `git pull --ff-only` ishlatadi: serverdagi nusxada commit qilinmagan o‘zgarish bo‘lsa, to‘xtaydi.
 
 ## Xabar qanday o‘qiladi
 
