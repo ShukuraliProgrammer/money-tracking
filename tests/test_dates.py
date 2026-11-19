@@ -128,3 +128,40 @@ def test_period_range_rejects_unknown_code():
 
 def test_month_label():
     assert month_label(2026, 11) == "Noyabr 2026"
+
+
+def test_period_range_previous_week():
+    period = period_range("pw", TZ, NOW)  # 19.11.2026 payshanba; o'tgan hafta 09–15 noyabr
+    assert period.start == datetime(2026, 11, 9, tzinfo=TZ)
+    assert period.end == datetime(2026, 11, 16, tzinfo=TZ)
+    assert period.label == "09.11 – 15.11.2026"
+
+
+def test_period_range_explicit_week_by_its_monday():
+    period = period_range("wk2026-11-09", TZ, NOW)
+    assert period.start == datetime(2026, 11, 9, tzinfo=TZ)
+    assert period.end == datetime(2026, 11, 16, tzinfo=TZ)
+    assert period.label == "09.11 – 15.11.2026"
+
+
+def test_week_label_shows_both_years_when_week_crosses_new_year():
+    assert period_range("wk2026-12-28", TZ, NOW).label == "28.12.2026 – 03.01.2027"
+
+
+@pytest.mark.parametrize("code", ["wk2026-11-10", "wk2026-13-01", "wk-nonsense"])
+def test_period_range_rejects_weeks_not_starting_on_monday(code):
+    with pytest.raises(ValueError):
+        period_range(code, TZ, NOW)
+
+
+def test_period_range_explicit_day():
+    period = period_range("day2026-11-19", TZ, datetime(2026, 12, 25, tzinfo=TZ))
+    assert period.start == datetime(2026, 11, 19, tzinfo=TZ)
+    assert period.end == datetime(2026, 11, 20, tzinfo=TZ)
+    assert period.label == "19.11.2026"
+
+
+@pytest.mark.parametrize("code", ["day2026-13-40", "day", "dayabc"])
+def test_period_range_rejects_bad_day(code):
+    with pytest.raises(ValueError):
+        period_range(code, TZ, NOW)

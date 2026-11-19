@@ -23,7 +23,7 @@ Bot:  ✅ Saqlandi
 - **Kiritish:** CardXabarBot va HUMOcardbot xabarlari, bank SMS’i (lotin/kirill), oddiy matn («Kamolonda 250 ming so‘m ovqatlandik»), `/add`.
 - **Uch savol:** nima uchun qilindi (izoh), qaysi turga kiradi, qaysi kartadan.
 - **Hisobot:** `/report` — davr → karta → tur bo‘yicha filtr; yig‘indilar, kartalar va turlar bo‘yicha taqsimot, eng katta xarajatlar, har bir tranzaksiya izohi bilan ro‘yxat, CSV.
-- **Oylik avtomatik hisobot:** har oyning 1-kuni soat 09:00 dan keyin o‘tgan oy hisoboti keladi (`/settings` da o‘chiriladi).
+- **Avtomatik hisobotlar:** har kuni 21:00 da kunlik (matn), har dushanba haftalik va har oyning 1-kuni oylik (rasm + matn). Har biri `/settings` da alohida o‘chiriladi.
 - **O‘rganish:** bir joy uchun tanlangan tur keyingi safar ⭐ bilan taklif qilinadi.
 - **Kartalar va turlar:** bir nechta karta, o‘z turlaringiz.
 - **Maxfiylik:** to‘liq karta raqami saqlanmaydi, izoh va asl xabar shifrlanadi, `/settings` orqali hamma ma’lumotni o‘chirish mumkin.
@@ -42,7 +42,7 @@ Bot boshqa botlarning xabarlarini o‘zi o‘qimaydi: faqat siz forward qilgan y
 | `/categories` | Turlar (qo‘shish, o‘chirish) |
 | `/export` | CSV fayl |
 | `/delete` | Oxirgi tranzaksiyani o‘chirish |
-| `/settings` | Vaqt zonasi, valyuta, oylik hisobot, ma’lumotlarni o‘chirish |
+| `/settings` | Vaqt zonasi, valyuta, avtomatik hisobotlar, ma’lumotlarni o‘chirish |
 | `/cancel`, `/help` | Joriy amalni bekor qilish, yordam |
 
 ## Ishga tushirish
@@ -119,6 +119,22 @@ SQLite fayli `moneytrack_data` nomli volume’da saqlanadi. Qo‘shimcha servisl
 - **Redis:** `.env` ga `REDIS_URL=redis://redis:6379/0` yozing va `docker compose --profile redis up -d --build`.
 - **PostgreSQL:** `.env` ga `POSTGRES_PASSWORD=…` va `DATABASE_URL=postgresql+asyncpg://moneytrack:…@postgres:5432/moneytrack` yozing, keyin `docker compose --profile postgres up -d --build`. Bot baza tayyor bo‘lguncha qayta ishga tushib turadi.
 
+## Avtomatik hisobotlar
+
+Vaqtlar foydalanuvchining vaqt zonasi bo‘yicha (`/settings`).
+
+| Hisobot | Qachon | Qaysi davr | Ko‘rinishi |
+|---|---|---|---|
+| Kunlik | har kuni 21:00 | shu kun | matn: yig‘indi va har bir tranzaksiya izohi bilan |
+| Haftalik | dushanba 09:00 | o‘tgan hafta (dushanba–yakshanba) | rasm + matn |
+| Oylik | har oyning 1-kuni 09:00 | o‘tgan oy | rasm + matn |
+
+- Rasmda kirim, chiqim, farq va turlar bo‘yicha chiqim ustunlari bor (asosiy valyuta bo‘yicha). Rasm ovozsiz, matn bildirishnoma bilan keladi, shuning uchun bitta signal eshitiladi.
+- Har bir hisobot ostidagi tugmalar o‘sha davrning tranzaksiyalar ro‘yxati, rasmi va CSV faylini ochadi. `/report` ichida ham «🖼 Rasm» tugmasi bor.
+- Davrda tranzaksiya bo‘lmasa, hisobot yuborilmaydi.
+- Bot belgilangan vaqtda ishlamay turgan bo‘lsa, haftalik va oylik hisobot keyingi tekshiruvda (har 30 daqiqada) yuboriladi. Kunlik hisobot faqat o‘sha kuni 21:00–24:00 orasida yuboriladi.
+- 21:00 dan keyingi tranzaksiyalar o‘sha kungi kunlik hisobotga kirmaydi, lekin haftalik va oylik hisobotda bo‘ladi.
+
 ## Xabar qanday o‘qiladi
 
 1. **Tozalash.** 13–19 xonali karta raqamlari `****1234` ko‘rinishiga keltiriladi. SMS kod, parol, PIN yoki CVV ga o‘xshash xabar umuman qayta ishlanmaydi.
@@ -159,7 +175,7 @@ app/
 ├── bot/
 │   ├── dispatcher.py       middleware, routerlar, xatolarni ushlash
 │   ├── middlewares.py      har bir yangilanish uchun sessiya va profil
-│   ├── scheduler.py        oylik avtomatik hisobot
+│   ├── scheduler.py        kunlik, haftalik va oylik avtomatik hisobot
 │   ├── states.py           suhbat holatlari
 │   ├── keyboards.py        inline tugmalar
 │   ├── render.py           xabar ko‘rinishlari
@@ -171,7 +187,9 @@ app/
 │   ├── notes.py            izoh tahlili (kishi soni, takrorlanish, tur taklifi)
 │   ├── transaction_service.py
 │   ├── report_service.py
+│   ├── chart_service.py    hisobot rasmi (Pillow)
 │   └── export_service.py
+├── assets/fonts/           Inter shrifti (SIL OFL 1.1, litsenziyasi shu papkada)
 └── utils/                  money, dates, validators, crypto, logging
 migrations/                 Alembic
 tests/                      pytest

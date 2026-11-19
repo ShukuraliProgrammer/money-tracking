@@ -119,6 +119,8 @@ def settings_text(user: User) -> str:
     return texts.SETTINGS.format(
         timezone=esc(user.timezone),
         currency=esc(user.preferred_currency),
+        daily=texts.ON if user.daily_report_enabled else texts.OFF,
+        weekly=texts.ON if user.weekly_report_enabled else texts.OFF,
         notifications=texts.ON if user.notifications_enabled else texts.OFF,
     )
 
@@ -183,21 +185,41 @@ def transactions_page(
 ) -> str:
     lines = [f"🧾 <b>{esc(title)}</b> — tranzaksiyalar ({page}/{pages})", esc(filter_line), ""]
     for transaction in transactions:
-        income = transaction.transaction_type == "income"
-        when = transaction.occurred_at.astimezone(tz).strftime("%d.%m %H:%M")
-        amount = f"{signed(transaction.amount, income)} {transaction.currency}"
-        lines.append(f"{when} · {'💰' if income else '💸'} <b>{amount}</b>")
-        details = []
-        if transaction.category:
-            details.append(f"{transaction.category.emoji} {esc(transaction.category.name)}")
-        if transaction.merchant:
-            details.append(esc(transaction.merchant))
-        details.append(f"****{transaction.card.card_last4}" if transaction.card else texts.BTN_NO_CARD)
-        lines.append(" · ".join(details))
-        if transaction.user_note:
-            note = transaction.user_note if len(transaction.user_note) <= 160 else transaction.user_note[:159] + "…"
-            lines.append(f"📝 {esc(note)}")
-        lines.append("")
+        lines += [*_transaction_block(transaction, tz, "%d.%m %H:%M"), ""]
+    return clip("\n".join(lines).rstrip())
+
+
+def _transaction_block(transaction: Transaction, tz: ZoneInfo, time_format: str) -> list[str]:
+    """Bitta tranzaksiya: vaqt va summa, tur · joy · karta, izoh."""
+    income = transaction.transaction_type == "income"
+    when = transaction.occurred_at.astimezone(tz).strftime(time_format)
+    amount = f"{signed(transaction.amount, income)} {transaction.currency}"
+    lines = [f"{when} · {'💰' if income else '💸'} <b>{amount}</b>"]
+    details = []
+    if transaction.category:
+        details.append(f"{transaction.category.emoji} {esc(transaction.category.name)}")
+    if transaction.merchant:
+        details.append(esc(transaction.merchant))
+    details.append(f"****{transaction.card.card_last4}" if transaction.card else texts.BTN_NO_CARD)
+    lines.append(" · ".join(details))
+    if transaction.user_note:
+        note = transaction.user_note if len(transaction.user_note) <= 160 else transaction.user_note[:159] + "…"
+        lines.append(f"📝 {esc(note)}")
+    return lines
+
+
+def daily_report_text(day_label: str, report: Report, transactions: list[Transaction], tz: ZoneInfo) -> str:
+    """Kunlik hisobot: yig‘indilar va shu kungi tranzaksiyalar (eng yangisi birinchi)."""
+    lines = [f"🗓 <b>{texts.DAILY_HEADING}</b> · {esc(day_label)}", ""]
+    for currency_report in report.currencies:
+        currency, totals = currency_report.currency, currency_report.totals
+        if len(report.currencies) > 1:
+            lines.append(f"<b>{currency}</b>")
+        lines += [f"💰 Kirim: {money(totals.income, currency)}", f"💸 Chiqim: {money(totals.expense, currency)}", ""]
+    for transaction in transactions:
+        lines += [*_transaction_block(transaction, tz, "%H:%M"), ""]
+    if report.count > len(transactions):
+        lines.append(texts.DAILY_MORE.format(count=report.count - len(transactions)))
     return clip("\n".join(lines).rstrip())
 
 

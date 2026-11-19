@@ -23,14 +23,18 @@ PLAIN_TEXT = F.text & ~F.text.startswith("/")
 # --- Sozlamalar ---------------------------------------------------------------- #
 
 
+def _menu(user: User):
+    return kb.settings_menu(user.daily_report_enabled, user.weekly_report_enabled, user.notifications_enabled)
+
+
 async def cmd_settings(message: Message, state: FSMContext, user: User) -> None:
     await state.clear()
-    await message.answer(render.settings_text(user), reply_markup=kb.settings_menu(user.notifications_enabled))
+    await message.answer(render.settings_text(user), reply_markup=_menu(user))
 
 
 async def on_menu(callback: CallbackQuery, state: FSMContext, user: User) -> None:
     await state.clear()
-    await edit_or_send(callback, render.settings_text(user), kb.settings_menu(user.notifications_enabled))
+    await edit_or_send(callback, render.settings_text(user), _menu(user))
 
 
 async def on_timezone_request(callback: CallbackQuery, state: FSMContext) -> None:
@@ -65,6 +69,16 @@ async def on_notifications_toggle(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, user: User
 ) -> None:
     await ts.update_user(session, user, notifications_enabled=not user.notifications_enabled)
+    await on_menu(callback, state, user)
+
+
+async def on_daily_toggle(callback: CallbackQuery, state: FSMContext, session: AsyncSession, user: User) -> None:
+    await ts.update_user(session, user, daily_report_enabled=not user.daily_report_enabled)
+    await on_menu(callback, state, user)
+
+
+async def on_weekly_toggle(callback: CallbackQuery, state: FSMContext, session: AsyncSession, user: User) -> None:
+    await ts.update_user(session, user, weekly_report_enabled=not user.weekly_report_enabled)
     await on_menu(callback, state, user)
 
 
@@ -137,6 +151,8 @@ def create_router() -> Router:
     callback.register(on_currency_request, F.data == "set:cur")
     callback.register(on_currency_button, F.data.regexp(r"^set:cur:[A-Z]{3}$"))
     callback.register(on_notifications_toggle, F.data == "set:notif")
+    callback.register(on_weekly_toggle, F.data == "set:weekly")
+    callback.register(on_daily_toggle, F.data == "set:daily")
     callback.register(on_wipe_request, F.data == "set:wipe")
     callback.register(on_wipe_confirmed, F.data == "set:wipe:yes")
     callback.register(on_category_add, F.data == "cat:add")

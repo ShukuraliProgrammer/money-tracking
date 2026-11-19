@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.utils.validators import normalize_text
@@ -151,17 +151,49 @@ def previous_month(year: int, month: int) -> tuple[int, int]:
     return (year - 1, 12) if month == 1 else (year, month - 1)
 
 
+def week_label(monday: datetime) -> str:
+    """«09.11 – 15.11.2026» (dushanbadan yakshanbagacha)."""
+    sunday = monday + timedelta(days=6)
+    start = monday.strftime("%d.%m.%Y" if monday.year != sunday.year else "%d.%m")
+    return f"{start} – {sunday:%d.%m.%Y}"
+
+
+def _week(monday: datetime) -> Period:
+    return Period(monday, monday + timedelta(days=7), week_label(monday))
+
+
 def period_range(code: str, tz: ZoneInfo, now: datetime) -> Period:
-    """Hisobot davri kodini (d, w, m, pm, 30, all, YYYY-MM) aniq vaqt oralig‘iga aylantiradi."""
+    """Hisobot davri kodini aniq vaqt oralig‘iga aylantiradi.
+
+    Kodlar: d, dayYYYY-MM-DD (aniq kun), w, pw (o‘tgan hafta),
+    wkYYYY-MM-DD (shu dushanbadan boshlanadigan hafta), m, pm, 30, all, YYYY-MM.
+    """
     now = now.astimezone(tz)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     tomorrow = today + timedelta(days=1)
 
     if code == "d":
         return Period(today, tomorrow, "Bugun")
+    if code.startswith("day"):
+        try:
+            day = date.fromisoformat(code[3:])
+        except ValueError:
+            raise ValueError(f"Unknown period code: {code!r}") from None
+        start = datetime(day.year, day.month, day.day, tzinfo=tz)
+        return Period(start, start + timedelta(days=1), f"{start:%d.%m.%Y}")
     if code == "w":
         monday = today - timedelta(days=today.weekday())
         return Period(monday, monday + timedelta(days=7), "Bu hafta")
+    if code == "pw":
+        return _week(today - timedelta(days=today.weekday() + 7))
+    if code.startswith("wk"):
+        try:
+            day = date.fromisoformat(code[2:])
+        except ValueError:
+            raise ValueError(f"Unknown period code: {code!r}") from None
+        if day.weekday() != 0:
+            raise ValueError(f"Week must start on Monday: {code!r}")
+        return _week(datetime(day.year, day.month, day.day, tzinfo=tz))
     if code == "30":
         return Period(today - timedelta(days=29), tomorrow, "Oxirgi 30 kun")
     if code == "all":

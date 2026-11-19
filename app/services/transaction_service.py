@@ -84,6 +84,10 @@ async def update_user(
     preferred_currency: str | None = None,
     notifications_enabled: bool | None = None,
     last_report_month: str | None = None,
+    weekly_report_enabled: bool | None = None,
+    last_weekly_report: str | None = None,
+    daily_report_enabled: bool | None = None,
+    last_daily_report: str | None = None,
 ) -> User:
     if timezone is not None:
         try:
@@ -100,6 +104,14 @@ async def update_user(
         user.notifications_enabled = notifications_enabled
     if last_report_month is not None:
         user.last_report_month = last_report_month
+    if weekly_report_enabled is not None:
+        user.weekly_report_enabled = weekly_report_enabled
+    if last_weekly_report is not None:
+        user.last_weekly_report = last_weekly_report
+    if daily_report_enabled is not None:
+        user.daily_report_enabled = daily_report_enabled
+    if last_daily_report is not None:
+        user.last_daily_report = last_daily_report
     await session.commit()
     return user
 

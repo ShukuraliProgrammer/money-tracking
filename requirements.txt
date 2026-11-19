@@ -10,3 +10,4 @@ anthropic>=2.10,<3
 openai>=1.50
 redis>=5
 tzdata
+Pillow>=10.1

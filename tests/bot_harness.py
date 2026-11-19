@@ -15,7 +15,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.methods import EditMessageText, GetMe, SendDocument, SendMessage, TelegramMethod
+from aiogram.methods import EditMessageText, GetMe, SendDocument, SendMessage, SendPhoto, TelegramMethod
 from aiogram.types import Chat, Message, Update, User
 
 from app.bot.dispatcher import build_dispatcher
@@ -34,7 +34,7 @@ class RecordingSession(BaseSession):
 
     async def make_request(self, bot: Bot, method: TelegramMethod[Any], timeout: int | None = None) -> Any:
         self.requests.append(method)
-        if isinstance(method, (SendMessage, SendDocument, EditMessageText)):
+        if isinstance(method, (SendMessage, SendDocument, SendPhoto, EditMessageText)):
             return Message(
                 message_id=getattr(method, "message_id", None) or next(self._ids),
                 date=datetime.now(),

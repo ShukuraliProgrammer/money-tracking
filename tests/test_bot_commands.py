@@ -358,3 +358,47 @@ async def test_stat_amounts_are_bold(seeded):
     assert "💰 <b>+1 000 000</b>" in text and "💸 <b>−304 000</b>" in text
     assert "Ovqatlanish — <b>250 000</b>" in text
     assert "Noyabr 2026: <b>+1 000 000 / −304 000 UZS</b>" in text
+
+
+# --- Hisobot rasmi va haftalik hisobot sozlamasi -------------------------------------- #
+
+
+async def test_report_picture_can_be_requested_on_demand(seeded):
+    from aiogram.methods import SendPhoto
+
+    await seeded.send("/report")
+    await seeded.click("Bu oy")
+    await seeded.click("Uzcard ish")
+    await seeded.click("Hamma turlar")
+    await seeded.click("Rasm")
+    (photo,) = [r for r in seeded.session.requests if isinstance(r, SendPhoto)]
+    assert photo.photo.data.startswith(b"\x89PNG")
+    assert "Noyabr 2026" in photo.caption and "Uzcard ish ****5678" in photo.caption
+
+
+async def test_empty_report_offers_no_picture(bot):
+    await bot.send("/report")
+    await bot.click("Bugun")
+    await bot.click("Hamma kartalar")
+    await bot.click("Hamma turlar")
+    assert not any("Rasm" in b for b in bot.buttons())
+
+
+async def test_settings_show_and_toggle_weekly_report(bot, session_factory):
+    await bot.send("/settings")
+    assert "Haftalik hisobot: yoqilgan" in bot.last_text()
+    await bot.click("Haftalik hisobot")
+    assert "Haftalik hisobot: o‘chirilgan" in bot.last_text()
+    async with session_factory() as session:
+        user = await session.scalar(select(User))
+    assert (user.weekly_report_enabled, user.notifications_enabled) == (False, True)
+
+
+async def test_settings_show_and_toggle_daily_report(bot, session_factory):
+    await bot.send("/settings")
+    assert "Kunlik hisobot: yoqilgan" in bot.last_text()
+    await bot.click("Kunlik hisobot")
+    assert "Kunlik hisobot: o‘chirilgan" in bot.last_text()
+    async with session_factory() as session:
+        user = await session.scalar(select(User))
+    assert (user.daily_report_enabled, user.weekly_report_enabled, user.notifications_enabled) == (False, True, True)

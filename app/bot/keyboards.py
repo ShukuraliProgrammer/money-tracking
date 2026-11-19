@@ -187,9 +187,8 @@ def report_summary_actions(period: str, card_id: int, category_id: int, count: i
     key = f"{period}:{card_id}:{category_id}"
     rows = []
     if count:
-        rows.append(
-            [_button(texts.BTN_TRANSACTIONS.format(count=count), f"rpv:{key}:1"), _button(texts.BTN_CSV, f"rpx:{key}")]
-        )
+        rows.append([_button(texts.BTN_TRANSACTIONS.format(count=count), f"rpv:{key}:1")])
+        rows.append([_button(texts.BTN_PICTURE, f"rpi:{key}"), _button(texts.BTN_CSV, f"rpx:{key}")])
     rows.append([_button(texts.BTN_FILTER, f"rpp:{period}"), _button(texts.BTN_PERIOD, "rp:start")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -218,12 +217,16 @@ def export_periods() -> InlineKeyboardMarkup:
 # --- Sozlamalar ---------------------------------------------------------------------- #
 
 
-def settings_menu(notifications_enabled: bool) -> InlineKeyboardMarkup:
-    state = texts.ON if notifications_enabled else texts.OFF
+def settings_menu(daily_enabled: bool, weekly_enabled: bool, monthly_enabled: bool) -> InlineKeyboardMarkup:
+    daily = texts.ON if daily_enabled else texts.OFF
+    weekly = texts.ON if weekly_enabled else texts.OFF
+    monthly = texts.ON if monthly_enabled else texts.OFF
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [_button(texts.BTN_TIMEZONE, "set:tz"), _button(texts.BTN_CURRENCY, "set:cur")],
-            [_button(texts.BTN_NOTIFICATIONS.format(state=state), "set:notif")],
+            [_button(texts.BTN_DAILY.format(state=daily), "set:daily")],
+            [_button(texts.BTN_WEEKLY.format(state=weekly), "set:weekly")],
+            [_button(texts.BTN_NOTIFICATIONS.format(state=monthly), "set:notif")],
             [_button(texts.BTN_WIPE, "set:wipe")],
         ]
     )

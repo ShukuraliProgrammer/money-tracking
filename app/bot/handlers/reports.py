@@ -6,6 +6,8 @@ ro‘yxati (har birining izohi bilan) yoki CSV fayl sifatida ko‘rish mumkin.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from math import ceil
 
 from aiogram import F, Router
@@ -21,10 +23,13 @@ from app.bot.common import Clock, callback_message, edit_or_send
 from app.models import User
 from app.services import report_service as rs
 from app.services import transaction_service as ts
+from app.services.chart_service import render_report_image
 from app.services.export_service import build_csv, export_filename
 from app.utils.dates import Period, period_range
 
 PAGE_SIZE = 10
+
+logger = logging.getLogger(__name__)
 
 
 async def _periods_view(session: AsyncSession, user: User, clock: Clock):
@@ -146,6 +151,33 @@ async def on_report_csv(
         callback_answer.show_alert = True
 
 
+async def on_report_picture(
+    callback: CallbackQuery, session: AsyncSession, user: User, clock: Clock, callback_answer: CallbackAnswer
+) -> None:
+    _, code, card_raw, category_raw = callback.data.split(":")
+    period = _period(code, user, clock)
+    if period is None:
+        callback_answer.text = texts.STALE_BUTTON
+        return
+    report_filter, filter_line = await _filter(session, user, period, int(card_raw), int(category_raw))
+    report = await rs.build_report(session, user.id, report_filter, user.preferred_currency)
+    if report.count == 0:
+        callback_answer.text = texts.REPORT_EMPTY
+        callback_answer.show_alert = True
+        return
+    main, others = report.currencies[0], [item.currency for item in report.currencies[1:]]
+    try:
+        image = await asyncio.to_thread(render_report_image, texts.REPORT_HEADING, period.label, main, others)
+    except Exception as error:  # noqa: BLE001 - rasm chiqmasa ham bot ishlashda davom etadi
+        logger.warning("Report picture failed: %s", type(error).__name__)
+        callback_answer.text = texts.PICTURE_FAILED
+        callback_answer.show_alert = True
+        return
+    await callback_message(callback).answer_photo(
+        BufferedInputFile(image, filename="hisobot.png"), caption=f"📊 {period.label}\n{filter_line}"
+    )
+
+
 async def cmd_stat(message: Message, state: FSMContext, session: AsyncSession, user: User, clock: Clock) -> None:
     await state.clear()
     stats = await rs.build_stats(session, user.id, user.tz, clock(), user.preferred_currency)
@@ -183,5 +215,6 @@ def create_router() -> Router:
     callback.register(on_card, F.data.regexp(r"^rpc:[\w-]+:\d+$"))
     callback.register(on_view, F.data.regexp(r"^rpv:[\w-]+:\d+:\d+:\d+$"))
     callback.register(on_report_csv, F.data.regexp(r"^rpx:[\w-]+:\d+:\d+$"))
+    callback.register(on_report_picture, F.data.regexp(r"^rpi:[\w-]+:\d+:\d+$"))
     callback.register(on_export, F.data.regexp(r"^ex:[\w-]+$"))
     return router

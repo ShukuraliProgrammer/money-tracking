@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -79,6 +80,12 @@ class User(Base):
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # Oylik hisobot oxirgi marta qaysi oy uchun yuborilgani ("2026-10").
     last_report_month: Mapped[str | None] = mapped_column(String(7))
+    weekly_report_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Haftalik hisobot oxirgi marta qaysi hafta uchun yuborilgani (o‘sha haftaning dushanbasi, "2026-11-09").
+    last_weekly_report: Mapped[str | None] = mapped_column(String(10))
+    daily_report_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Kunlik hisobot oxirgi marta qaysi kun uchun yuborilgani ("2026-11-19").
+    last_daily_report: Mapped[str | None] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     @property
