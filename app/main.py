@@ -1,4 +1,4 @@
-"""MoneyTrack UZ — ishga tushirish nuqtasi: ``python -m app.main``."""
+"""Karta nazoratchi — ishga tushirish nuqtasi: ``python -m app.main``."""
 
 from __future__ import annotations
 

@@ -51,4 +51,4 @@ def build_csv(transactions: list[Transaction], tz: ZoneInfo) -> bytes:
 
 def export_filename(period_label: str, now: datetime) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", period_label.lower()).strip("_") or "hisobot"
-    return f"moneytrack_{slug}_{now:%Y%m%d}.csv"
+    return f"karta_nazoratchi_{slug}_{now:%Y%m%d}.csv"

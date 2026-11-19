@@ -61,4 +61,4 @@ def test_csv_without_transactions_has_only_header():
 
 
 def test_export_filename_is_safe_ascii():
-    assert export_filename("Noyabr 2026", datetime(2026, 11, 19, tzinfo=TZ)) == "moneytrack_noyabr_2026_20261119.csv"
+    assert export_filename("Noyabr 2026", datetime(2026, 11, 19, tzinfo=TZ)) == "karta_nazoratchi_noyabr_2026_20261119.csv"

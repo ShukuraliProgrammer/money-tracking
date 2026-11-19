@@ -1,4 +1,4 @@
-# MoneyTrack UZ
+# Karta nazoratchi
 
 Debit kartalardagi kirim va chiqimlarni kuzatadigan Telegram bot. Karta xabarini botga tashlaysiz, bot uchta savol beradi va oy oxirida hamma kartalar bo‘yicha hisobot chiqaradi.
 
@@ -53,7 +53,7 @@ Bot boshqa botlarning xabarlarini o‘zi o‘qimaydi: faqat siz forward qilgan y
 ### 1. BotFather
 
 1. Telegram’da [@BotFather](https://t.me/BotFather) ga yozing: `/newbot`.
-2. Bot nomi (masalan `MoneyTrack UZ`) va username (masalan `my_moneytrack_bot`) bering.
+2. Bot nomi (`Karta nazoratchi`) va username (masalan `karta_nazoratchi_bot`) bering.
 3. BotFather bergan tokenni `.env` faylidagi `BOT_TOKEN` ga yozing.
 4. Buyruqlar ro‘yxati bot ishga tushganda avtomatik o‘rnatiladi. Xohlasangiz `/setdescription` bilan tavsif qo‘shing.
 
@@ -234,7 +234,7 @@ pgAdmin → **Register → Server**:
 
 | Bo‘lim | Maydon | Qiymat |
 |---|---|---|
-| General | Name | MoneyTrack |
+| General | Name | Karta nazoratchi |
 | Connection | Host name/address | `127.0.0.1` |
 | Connection | Port | `5432` |
 | Connection | Maintenance database | `moneytrack` |

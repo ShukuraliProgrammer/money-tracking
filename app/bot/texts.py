@@ -11,7 +11,7 @@ START = (
 )
 
 HELP = (
-    "🤖 <b>MoneyTrack UZ</b>\n\n"
+    "🤖 <b>Karta nazoratchi</b>\n\n"
     "📩 Karta xabarini forward qiling, matnini, screenshot’ini yoki PDF chekini yuboring.\n\n"
     "<b>Tranzaksiyalar</b>\n"
     "➕ /add — qo‘lda qo‘shish\n"

@@ -35,7 +35,7 @@ INK_MUTED = (137, 135, 129)
 HAIRLINE = (230, 229, 225)
 BAR_COLOR = (42, 120, 214)
 
-BRAND = "MoneyTrack UZ"
+BRAND = "Karta nazoratchi"
 REST_LABEL = "Qolganlari"
 NO_EXPENSES = "Bu davrda chiqim yo‘q."
 

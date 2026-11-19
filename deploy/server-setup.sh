@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MoneyTrack UZ — serverni tayyorlash (Ubuntu yoki Debian). Repo'ni clone qilgandan keyin,
+# Karta nazoratchi — serverni tayyorlash (Ubuntu yoki Debian). Repo'ni clone qilgandan keyin,
 # uning ichidan ishga tushiriladi:
 #
 #   git clone https://github.com/ShukuraliProgrammer/money-tracking.git
@@ -57,7 +57,7 @@ if [ -f "$ENV_FILE" ]; then
 else
   # Fernet kaliti: 32 tasodifiy bayt, URL-xavfsiz base64.
   cat > "$ENV_FILE" <<ENV
-# MoneyTrack UZ sozlamalari. To'liq ro'yxat: .env.example
+# Karta nazoratchi sozlamalari. To'liq ro'yxat: .env.example
 BOT_TOKEN=
 ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
